@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kad AR — Teknologi Kimpalan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../shared/css/style.css">
+</head>
+<body>
+
+<div class="hazard"></div>
+<header class="top">
+  <p class="eyebrow">Kolej Vokasional · Teknologi Kimpalan</p>
+  <h1>Kad Bahan Bantu Mengajar AR</h1>
+  <p class="subhead">Pilih topik → belajar dengan imbas kad → uji kefahaman dengan kuiz. Skor kamu direkod pada papan pendahulu.</p>
+</header>
+
+<main>
+  <div id="msg" class="panel" style="display:none;"></div>
+  <div class="grid" id="topic-grid"></div>
+
+  <footer class="note">
+    Guna kamera memerlukan kebenaran browser dan sambungan https/localhost. Kalau kad AR tak dikesan,
+    cuba Mod 3D dahulu untuk pastikan kandungan sedia.
+  </footer>
+</main>
+
+<script src="../shared/js/api.js"></script>
+<script>
+async function boot(){
+  const grid = document.getElementById("topic-grid");
+  const msg = document.getElementById("msg");
+
+  if (!apiConfigured()){
+    msg.style.display = "block";
+    msg.innerHTML = `<h2>Belum disambung</h2><p style="font-size:13px;color:var(--text-dim);">API_URL belum diisi dalam <code>shared/js/api.js</code>. Sila ikut README.md Langkah 3.</p>`;
+    return;
+  }
+
+  try {
+    const topics = await Api.getTopics();
+    if (!topics.length){
+      msg.style.display = "block";
+      msg.innerHTML = `<h2>Tiada topik lagi</h2><p style="font-size:13px;color:var(--text-dim);">Tambah topik melalui halaman admin.</p>`;
+      return;
+    }
+    topics.forEach((t, i) => {
+      const a = document.createElement("div");
+      a.className = "topic-card";
+      a.innerHTML = `
+        <div class="tag-strip" style="background:${t.accent_color || '#ff7a1a'}"></div>
+        <div class="body">
+          <div class="idx">TOPIK ${String(i+1).padStart(2,"0")}</div>
+          <h3>${t.title}</h3>
+          <p>${t.description || ""}</p>
+          <div class="modes">
+            <a class="btn" style="margin-top:10px;" href="learn.html?topic=${encodeURIComponent(t.topic_id)}">Belajar</a>
+            <a class="btn ghost" style="margin-top:10px;" href="quiz.html?topic=${encodeURIComponent(t.topic_id)}">Kuiz</a>
+            <a class="btn ghost" style="margin-top:10px;" href="leaderboard.html?topic=${encodeURIComponent(t.topic_id)}">Skor</a>
+          </div>
+        </div>
+      `;
+      grid.appendChild(a);
+    });
+  } catch (err) {
+    msg.style.display = "block";
+    msg.innerHTML = `<h2>Ralat memuatkan data</h2><p style="font-size:13px;color:var(--text-dim);">${err.message}</p>`;
+  }
+}
+boot();
+</script>
+</body>
+</html>

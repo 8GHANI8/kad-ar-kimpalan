@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Kuiz — Kad AR Kimpalan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../shared/css/style.css">
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+    "mindar-image-three": "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"
+  }
+}
+</script>
+</head>
+<body class="viewer">
+
+<div class="viewer-wrap">
+
+  <!-- ===== SKRIN 1: isi nama ===== -->
+  <div class="score-screen" id="screen-identify">
+    <div class="score-box">
+      <p class="eyebrow" style="color:var(--arc);">Kuiz</p>
+      <h1 id="identify-topic-title" style="font-size:24px;margin-bottom:18px;">Memuatkan…</h1>
+      <form id="identify-form" style="text-align:left;">
+        <label for="f-nama">Nama</label>
+        <input type="text" id="f-nama" placeholder="Nama penuh">
+        <p class="field-error" id="err-nama">Sila isi nama.</p>
+        <label for="f-kelas">Kelas</label>
+        <input type="text" id="f-kelas" placeholder="cth: DKM 2A">
+        <p class="field-error" id="err-kelas">Sila isi kelas.</p>
+        <label for="f-institusi">Institusi</label>
+        <input type="text" id="f-institusi" placeholder="cth: Kolej Vokasional...">
+        <p class="field-error" id="err-institusi">Sila isi institusi.</p>
+        <button type="submit" class="btn block">Mula Kuiz</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===== SKRIN 2: intro topik ===== -->
+  <div class="score-screen" id="screen-intro" style="display:none;">
+    <div class="score-box">
+      <p class="eyebrow" style="color:var(--arc);">Sedia?</p>
+      <h1 id="intro-title" style="font-size:22px;margin:8px 0 12px;">—</h1>
+      <p style="font-size:13px;color:var(--text-dim);line-height:1.7;margin-bottom:22px;" id="intro-desc">
+        Kamu akan diminta cari item tertentu guna kamera. Bila jumpa, tekan "Ini Dia!" untuk sahkan,
+        kemudian jawab satu soalan pendek. Setiap item bernilai 2 markah.
+      </p>
+      <button class="btn block" id="btn-start-quiz">Buka Kamera & Mula</button>
+    </div>
+  </div>
+
+  <!-- ===== SKRIN 3: sesi AR (cari & jawab) ===== -->
+  <div id="stage-ar" style="display:none;">
+    <div id="ar-container" style="position:absolute;inset:0;"></div>
+
+    <div class="hud-top">
+      <div class="title" id="hud-progress">Item 1/1</div>
+      <a class="back" href="index.html">✕ Keluar</a>
+    </div>
+
+    <div class="quiz-target-banner" id="target-banner">
+      <span class="label">Cari</span>
+      <span id="target-name">—</span>
+    </div>
+
+    <div class="hud-status" id="hud-status"><span class="dot"></span><span id="hud-status-text">Memulakan kamera…</span></div>
+
+    <button class="btn confirm-btn" id="btn-confirm" disabled>Ini Dia!</button>
+
+    <div class="mcq-overlay" id="mcq-overlay" style="display:none;">
+      <div class="mcq-box">
+        <p class="eyebrow" id="mcq-verdict" style="color:var(--good);">Betul!</p>
+        <h3 id="mcq-prompt">—</h3>
+        <div id="mcq-options"></div>
+        <p class="mcq-feedback" id="mcq-feedback"></p>
+        <button class="btn block" id="btn-next-item" style="display:none;">Seterusnya →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== SKRIN 4: keputusan ===== -->
+  <div class="score-screen" id="screen-result" style="display:none;">
+    <div class="score-box">
+      <p class="eyebrow" style="color:var(--arc);">Selesai!</p>
+      <div class="score-num" id="result-score">0/0</div>
+      <p style="font-size:13px;color:var(--text-dim);margin-bottom:24px;" id="result-percent">0%</p>
+      <a class="btn block" id="btn-leaderboard" style="margin-bottom:10px;">Lihat Papan Pendahulu</a>
+      <a class="btn ghost block" href="index.html">Kembali ke Senarai Topik</a>
+    </div>
+  </div>
+
+</div>
+
+<script src="../shared/js/api.js"></script>
+<script src="../shared/js/models.js"></script>
+<script type="module">
+import { startARViewer } from "../shared/js/ar-core.js";
+
+const params = new URLSearchParams(location.search);
+const topicId = params.get("topic");
+
+const screenIdentify = document.getElementById("screen-identify");
+const screenIntro = document.getElementById("screen-intro");
+const stageAr = document.getElementById("stage-ar");
+const screenResult = document.getElementById("screen-result");
+
+const hudProgress = document.getElementById("hud-progress");
+const hudStatusText = document.getElementById("hud-status-text");
+const targetName = document.getElementById("target-name");
+const btnConfirm = document.getElementById("btn-confirm");
+const mcqOverlay = document.getElementById("mcq-overlay");
+const mcqVerdict = document.getElementById("mcq-verdict");
+const mcqPrompt = document.getElementById("mcq-prompt");
+const mcqOptions = document.getElementById("mcq-options");
+const mcqFeedback = document.getElementById("mcq-feedback");
+const btnNextItem = document.getElementById("btn-next-item");
+
+let bundle = null;
+let student = null; // {nama, kelas, institusi}
+let order = [];      // items dalam urutan rawak
+let currentIdx = 0;
+let score = 0;
+let totalPossible = 0;
+let visibleItemIds = new Set();
+let arSession = null;
+
+function shuffle(arr){
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i+1));
+    [a[i],a[j]] = [a[j],a[i]];
+  }
+  return a;
+}
+
+// ---------- SKRIN 1 ----------
+document.getElementById("identify-form").addEventListener("submit", (ev) => {
+  ev.preventDefault();
+  const nama = document.getElementById("f-nama").value.trim();
+  const kelas = document.getElementById("f-kelas").value.trim();
+  const institusi = document.getElementById("f-institusi").value.trim();
+  let ok = true;
+  [["nama",nama],["kelas",kelas],["institusi",institusi]].forEach(([field,val]) => {
+    const err = document.getElementById("err-"+field);
+    if (!val){ err.classList.add("show"); ok = false; } else { err.classList.remove("show"); }
+  });
+  if (!ok) return;
+  student = { nama, kelas, institusi };
+  sessionStorage.setItem("quizStudent", JSON.stringify(student));
+  screenIdentify.style.display = "none";
+  screenIntro.style.display = "flex";
+});
+
+// ---------- SKRIN 2 ----------
+document.getElementById("btn-start-quiz").addEventListener("click", startQuizSession);
+
+async function startQuizSession(){
+  screenIntro.style.display = "none";
+  stageAr.style.display = "block";
+  order = shuffle(bundle.items);
+  totalPossible = order.length * 2;
+  currentIdx = 0;
+  score = 0;
+
+  arSession = await startARViewer(document.getElementById("ar-container"), topicId, bundle.items, {
+    onTargetFound: (item) => { visibleItemIds.add(item.item_id); updateConfirmState(); },
+    onTargetLost: (item) => { visibleItemIds.delete(item.item_id); updateConfirmState(); },
+    onError: (err) => {
+      console.error(err);
+      hudStatusText.textContent = "AR gagal dimuat — semak sambungan internet & targets.mind";
+    }
+  });
+  if (arSession){
+    hudStatusText.textContent = "Cari kad…";
+    showCurrentTarget();
+  }
+}
+
+function updateConfirmState(){
+  btnConfirm.disabled = visibleItemIds.size === 0;
+}
+
+function showCurrentTarget(){
+  const item = order[currentIdx];
+  hudProgress.textContent = `Item ${currentIdx+1}/${order.length}`;
+  targetName.textContent = item.title;
+  btnConfirm.disabled = true;
+  visibleItemIds.clear();
+}
+
+btnConfirm.addEventListener("click", () => {
+  const item = order[currentIdx];
+  if (visibleItemIds.has(item.item_id)){
+    score += 1;
+    askFollowUpQuestion(item);
+  } else {
+    hudStatusText.textContent = "Bukan itu — cuba cari kad yang betul";
+    setTimeout(() => { if (arSession) hudStatusText.textContent = "Cari kad…"; }, 1600);
+  }
+});
+
+// ---------- soalan susulan ----------
+function askFollowUpQuestion(item){
+  const q = (item.questions && item.questions[0]) || null;
+  mcqOverlay.style.display = "flex";
+  mcqFeedback.textContent = "";
+  btnNextItem.style.display = "none";
+
+  if (!q){
+    mcqVerdict.textContent = "Ditemui!";
+    mcqVerdict.style.color = "var(--good)";
+    mcqPrompt.textContent = item.title + " — tiada soalan tambahan untuk item ini.";
+    mcqOptions.innerHTML = "";
+    btnNextItem.style.display = "block";
+    return;
+  }
+
+  mcqVerdict.textContent = "Ditemui! Satu soalan lagi:";
+  mcqVerdict.style.color = "var(--good)";
+  mcqPrompt.textContent = q.prompt;
+  mcqOptions.innerHTML = "";
+
+  const opts = [["a",q.option_a],["b",q.option_b],["c",q.option_c],["d",q.option_d]].filter(([,v]) => v);
+  opts.forEach(([key,label]) => {
+    const b = document.createElement("button");
+    b.className = "mcq-option";
+    b.textContent = label;
+    b.addEventListener("click", () => answerQuestion(key, q, b));
+    mcqOptions.appendChild(b);
+  });
+}
+
+function answerQuestion(chosenKey, q, btnEl){
+  const buttons = mcqOptions.querySelectorAll(".mcq-option");
+  buttons.forEach(b => b.disabled = true);
+  const correct = chosenKey === q.correct_option;
+  if (correct){
+    score += 1;
+    btnEl.classList.add("correct");
+    mcqFeedback.textContent = "Betul!";
+  } else {
+    btnEl.classList.add("wrong");
+    mcqFeedback.textContent = "Kurang tepat — jawapan sebenar ditandakan hijau.";
+    highlightCorrect(q);
+  }
+  btnNextItem.style.display = "block";
+}
+
+function opts_key(q, i){
+  return ["a","b","c","d"][i];
+}
+function highlightCorrect(q){
+  const labels = { a:q.option_a, b:q.option_b, c:q.option_c, d:q.option_d };
+  const correctLabel = labels[q.correct_option];
+  mcqOptions.querySelectorAll(".mcq-option").forEach(b => {
+    if (b.textContent === correctLabel) b.classList.add("correct");
+  });
+}
+
+btnNextItem.addEventListener("click", () => {
+  mcqOverlay.style.display = "none";
+  currentIdx += 1;
+  if (currentIdx >= order.length){
+    finishQuiz();
+  } else {
+    showCurrentTarget();
+  }
+});
+
+// ---------- SKRIN 4 ----------
+async function finishQuiz(){
+  if (arSession) { arSession.stop(); arSession = null; }
+  stageAr.style.display = "none";
+  screenResult.style.display = "flex";
+
+  const percentage = totalPossible ? Math.round((score/totalPossible)*100) : 0;
+  document.getElementById("result-score").textContent = `${score}/${totalPossible}`;
+  document.getElementById("result-percent").textContent = `${percentage}%`;
+  document.getElementById("btn-leaderboard").href = `leaderboard.html?topic=${encodeURIComponent(topicId)}`;
+
+  try {
+    await Api.submitScore({
+      timestamp: new Date().toISOString(),
+      nama: student.nama,
+      kelas: student.kelas,
+      institusi: student.institusi,
+      topic_id: topicId,
+      score,
+      total_possible: totalPossible,
+      percentage
+    });
+  } catch (err){
+    console.error("Gagal hantar skor:", err);
+  }
+}
+
+// ---------- boot ----------
+async function boot(){
+  if (!topicId || !apiConfigured()){
+    document.getElementById("identify-topic-title").textContent = "Ralat konfigurasi";
+    return;
+  }
+  try {
+    bundle = await Api.getTopicBundle(topicId);
+    document.title = "Kuiz — " + bundle.topic.title;
+    document.getElementById("identify-topic-title").textContent = bundle.topic.title;
+    document.getElementById("intro-title").textContent = bundle.topic.title;
+    document.getElementById("intro-desc").innerHTML =
+      `Kamu akan diminta cari <strong style="color:var(--text);">${bundle.items.length} item</strong> guna kamera. ` +
+      `Bila jumpa, tekan "Ini Dia!" untuk sahkan, kemudian jawab satu soalan pendek. Setiap item bernilai 2 markah.`;
+  } catch (err) {
+    document.getElementById("identify-topic-title").textContent = "Ralat: " + err.message;
+  }
+}
+boot();
+</script>
+</body>
+</html>

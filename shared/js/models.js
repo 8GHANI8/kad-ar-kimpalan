@@ -1,0 +1,182 @@
+// ============================================================================
+// MODELS.JS
+// Setiap fungsi di sini pulangkan hanya THREE.Group (bentuk 3D).
+// Hotspot TIDAK dibina di sini lagi - ia datang dari Google Sheet (Hotspots tab)
+// dan dilekat automatik oleh app.js guna pos_x/pos_y/pos_z. Ini bermakna bila
+// kamu ganti model placeholder dengan .glb sebenar, kamu HANYA tukar fungsi
+// builder - hotspot terus berfungsi sebab ia datang dari data, bukan kod.
+//
+// model_ref dalam sheet "Items" mesti sama dengan nama fungsi di bawah.
+// Kalau model_ref tak jumpa, buildGeneric() akan diguna sebagai gantian
+// supaya app tak crash - jadi kamu boleh isi Sheet dulu sebelum semua model
+// siap dibina.
+// ============================================================================
+
+const MODEL_BUILDERS = {};
+
+function registerModel(name, fn) {
+  MODEL_BUILDERS[name] = fn;
+}
+
+function buildModelByRef(THREE, ref) {
+  const fn = MODEL_BUILDERS[ref];
+  if (typeof fn === "function") return fn(THREE);
+  return buildGeneric(THREE);
+}
+
+// ---------------------------------------------------------------- generic --
+function buildGeneric(THREE) {
+  const group = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: 0x555559, roughness: 0.6, metalness: 0.3 });
+  const box = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), mat);
+  group.add(box);
+  const wire = new THREE.Mesh(
+    new THREE.BoxGeometry(0.42, 0.42, 0.42),
+    new THREE.MeshBasicMaterial({ color: 0xff7a1a, wireframe: true })
+  );
+  group.add(wire);
+  group.userData.idleSpin = 0.2;
+  return group;
+}
+registerModel("buildGeneric", buildGeneric);
+
+// ------------------------------------------------------------- SMAW parts --
+registerModel("buildSMAWMachine", (THREE) => {
+  const group = new THREE.Group();
+  const metal = new THREE.MeshStandardMaterial({ color: 0x2b2b2e, roughness: 0.6, metalness: 0.4 });
+  const accent = new THREE.MeshStandardMaterial({ color: 0xff7a1a, roughness: 0.4, metalness: 0.2 });
+
+  const box = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.5, 0.45), metal);
+  group.add(box);
+  const dial = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.03, 20), accent);
+  dial.rotation.x = Math.PI / 2;
+  dial.position.set(0.2, 0.1, 0.24);
+  group.add(dial);
+  const vent = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.02, 0.3), new THREE.MeshStandardMaterial({ color: 0x111113 }));
+  vent.position.set(-0.05, 0.2, 0);
+  group.add(vent);
+
+  group.userData.idleSpin = 0.15;
+  return group;
+});
+
+registerModel("buildElectrodeHolder", (THREE) => {
+  const group = new THREE.Group();
+  const rubber = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.9 });
+  const accent = new THREE.MeshStandardMaterial({ color: 0xff7a1a, roughness: 0.4, metalness: 0.2 });
+  const rodMat = new THREE.MeshStandardMaterial({ color: 0xcfcfd2, roughness: 0.3, metalness: 0.6 });
+
+  const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.05, 0.32, 16), rubber);
+  handle.rotation.z = Math.PI / 2.3;
+  group.add(handle);
+  const jaw = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.13, 16), accent);
+  jaw.rotation.z = Math.PI / 2.3;
+  jaw.position.set(0.17, 0.1, 0);
+  group.add(jaw);
+  const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.22, 10), rodMat);
+  rod.rotation.z = Math.PI / 2.3;
+  rod.position.set(0.34, 0.155, 0);
+  group.add(rod);
+
+  const glow = new THREE.Mesh(new THREE.SphereGeometry(0.03, 12, 12), new THREE.MeshBasicMaterial({ color: 0xeaf6ff }));
+  glow.position.set(0.44, 0.19, 0);
+  group.add(glow);
+  const light = new THREE.PointLight(0xfff0d0, 1.2, 1);
+  light.position.copy(glow.position);
+  group.add(light);
+
+  group.userData.idleSpin = 0.15;
+  group.userData.flicker = light;
+  return group;
+});
+
+registerModel("buildGroundClamp", (THREE) => {
+  const group = new THREE.Group();
+  const accent = new THREE.MeshStandardMaterial({ color: 0xff7a1a, roughness: 0.4, metalness: 0.2 });
+  const rubber = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.9 });
+
+  const jawTop = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.05, 0.08), accent);
+  jawTop.position.set(0, 0.05, 0);
+  jawTop.rotation.z = -0.15;
+  group.add(jawTop);
+  const jawBottom = jawTop.clone();
+  jawBottom.position.y = -0.05;
+  jawBottom.rotation.z = 0.15;
+  group.add(jawBottom);
+  const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.22, 12), rubber);
+  handle.rotation.z = Math.PI / 2;
+  handle.position.set(-0.22, 0, 0);
+  group.add(handle);
+
+  group.userData.idleSpin = 0.18;
+  return group;
+});
+
+// -------------------------------------------------------------------- PPE --
+registerModel("buildHelmet", (THREE) => {
+  const group = new THREE.Group();
+  const shell = new THREE.MeshStandardMaterial({ color: 0x1c1c1e, roughness: 0.5, metalness: 0.2 });
+  const visor = new THREE.MeshStandardMaterial({ color: 0x0d2b33, roughness: 0.2, metalness: 0.6 });
+  const warn = new THREE.MeshStandardMaterial({ color: 0xffcc00, roughness: 0.5 });
+
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(0.28, 24, 16, 0, Math.PI * 2, 0, Math.PI * 0.62), shell);
+  group.add(dome);
+  const plate = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.16, 0.03), visor);
+  plate.position.set(0, -0.06, 0.24);
+  group.add(plate);
+  const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.02, 0.04), warn);
+  stripe.position.set(0, 0.16, 0.2);
+  group.add(stripe);
+
+  group.userData.idleSpin = 0.12;
+  return group;
+});
+
+// ------------------------------------------------------------------ joints -
+registerModel("buildButtJoint", (THREE) => {
+  const group = new THREE.Group();
+  const steel = new THREE.MeshStandardMaterial({ color: 0x8a8d93, roughness: 0.55, metalness: 0.5 });
+  const bead = new THREE.MeshStandardMaterial({ color: 0x4fc3f7, roughness: 0.5, metalness: 0.3 });
+  const a = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.06, 0.4), steel);
+  a.position.set(-0.17, 0, 0);
+  group.add(a);
+  const b = a.clone();
+  b.position.x = 0.17;
+  group.add(b);
+  const w = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.4, 10), bead);
+  w.rotation.z = Math.PI / 2; w.rotation.y = Math.PI / 2;
+  w.position.set(0, 0.045, 0);
+  group.add(w);
+  group.userData.idleSpin = 0.14;
+  return group;
+});
+
+registerModel("buildFilletJoint", (THREE) => {
+  const group = new THREE.Group();
+  const steel = new THREE.MeshStandardMaterial({ color: 0x8a8d93, roughness: 0.55, metalness: 0.5 });
+  const bead = new THREE.MeshStandardMaterial({ color: 0x4fc3f7, roughness: 0.5, metalness: 0.3 });
+  const base = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.05, 0.32), steel);
+  group.add(base);
+  const upright = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.32, 0.32), steel);
+  upright.position.set(0, 0.16, 0);
+  group.add(upright);
+  const w = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.32, 10), bead);
+  w.rotation.z = Math.PI / 2;
+  w.position.set(0.03, 0.025, 0);
+  group.add(w);
+  group.userData.idleSpin = 0.14;
+  return group;
+});
+
+// ============================================================================
+// Bila model .glb sebenar dah sedia, ganti mana-mana registerModel(...) di atas
+// dengan versi async guna GLTFLoader. Contoh (perlu import GLTFLoader dalam
+// app.js dahulu - lihat nota dalam README.md):
+//
+//   registerModel("buildSMAWMachine", async (THREE, GLTFLoader) => {
+//     const loader = new GLTFLoader();
+//     const gltf = await loader.loadAsync("assets/models/mesin-smaw.glb");
+//     gltf.scene.scale.set(0.4, 0.4, 0.4);
+//     return gltf.scene;
+//   });
+// ============================================================================

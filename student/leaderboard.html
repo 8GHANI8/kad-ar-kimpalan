@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Papan Pendahulu — Kad AR Kimpalan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../shared/css/style.css">
+</head>
+<body>
+
+<div class="hazard"></div>
+<header class="top">
+  <p class="eyebrow">Papan Pendahulu</p>
+  <h1 id="topic-title">Memuatkan…</h1>
+  <p class="subhead">Skor terbaik pelajar untuk topik ini.</p>
+</header>
+
+<main>
+  <div class="panel">
+    <div class="admin-table-wrap">
+      <table id="score-table">
+        <thead>
+          <tr><th>#</th><th>Nama</th><th>Kelas</th><th>Institusi</th><th>Skor</th><th>%</th></tr>
+        </thead>
+        <tbody id="score-body"></tbody>
+      </table>
+    </div>
+  </div>
+  <a class="btn ghost" href="index.html">← Kembali</a>
+</main>
+
+<script src="../shared/js/api.js"></script>
+<script>
+async function boot(){
+  const params = new URLSearchParams(location.search);
+  const topicId = params.get("topic");
+  const body = document.getElementById("score-body");
+
+  if (!apiConfigured()){
+    document.getElementById("topic-title").textContent = "API belum disambung";
+    return;
+  }
+
+  try {
+    const scores = await Api.getLeaderboard(topicId);
+    document.getElementById("topic-title").textContent = topicId ? `Topik: ${topicId}` : "Semua Topik";
+    if (!scores.length){
+      body.innerHTML = `<tr><td colspan="6" style="color:var(--text-dim);">Belum ada rekod skor lagi.</td></tr>`;
+      return;
+    }
+    scores.forEach((s, i) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td class="rank">${i+1}</td>
+        <td>${s.nama}</td>
+        <td>${s.kelas}</td>
+        <td>${s.institusi}</td>
+        <td>${s.score}/${s.total_possible}</td>
+        <td>${s.percentage}%</td>
+      `;
+      body.appendChild(tr);
+    });
+  } catch (err) {
+    document.getElementById("topic-title").textContent = "Ralat: " + err.message;
+  }
+}
+boot();
+</script>
+</body>
+</html>

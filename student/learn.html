@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Belajar — Kad AR Kimpalan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../shared/css/style.css">
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+    "mindar-image-three": "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"
+  }
+}
+</script>
+</head>
+<body class="viewer">
+
+<div class="viewer-wrap">
+  <div id="stage"></div>
+  <div id="ar-container"></div>
+
+  <div class="hud-top">
+    <div class="title" id="hud-title">Memuatkan…</div>
+    <a class="back" href="index.html">← Senarai Topik</a>
+  </div>
+
+  <div class="mode-toggle">
+    <button id="btn-3d" class="active">3D</button>
+    <button id="btn-ar">AR</button>
+  </div>
+
+  <div class="item-picker" id="item-picker"></div>
+
+  <div class="hud-status" id="hud-status"><span class="dot"></span><span id="hud-status-text">Sedia</span></div>
+
+  <div class="hotspot-panel" id="hotspot-panel">
+    <span class="close" id="hotspot-close">✕</span>
+    <p class="hs-label">Bahagian</p>
+    <h4 id="hs-title">—</h4>
+    <p id="hs-info">—</p>
+  </div>
+
+  <div class="instruction-toast" id="toast-ar" style="display:none;">
+    <h3>Mod AR</h3>
+    <p id="toast-ar-text">Benarkan akses kamera, kemudian halakan kamera ke mana-mana kad topik ini.</p>
+    <button class="btn" id="toast-ar-close">Buka Kamera</button>
+  </div>
+</div>
+
+<script src="../shared/js/api.js"></script>
+<script src="../shared/js/models.js"></script>
+<script type="module">
+import { startARViewer, start3DViewer } from "../shared/js/ar-core.js";
+
+const params = new URLSearchParams(location.search);
+const topicId = params.get("topic");
+
+const hudTitle = document.getElementById("hud-title");
+const hudStatusText = document.getElementById("hud-status-text");
+const btn3d = document.getElementById("btn-3d");
+const btnAr = document.getElementById("btn-ar");
+const itemPicker = document.getElementById("item-picker");
+const hotspotPanel = document.getElementById("hotspot-panel");
+const hsTitle = document.getElementById("hs-title");
+const hsInfo = document.getElementById("hs-info");
+const toastAr = document.getElementById("toast-ar");
+const toastArText = document.getElementById("toast-ar-text");
+
+document.getElementById("hotspot-close").addEventListener("click", () => hotspotPanel.classList.remove("show"));
+
+let bundle = null;
+let currentMode = "3d";
+let currentItemIndex = 0;
+let threeSession = null;
+let arSession = null;
+
+function showHotspot(hit){
+  hsTitle.textContent = hit.label;
+  hsInfo.textContent = hit.info;
+  hotspotPanel.classList.add("show");
+}
+
+function renderItemPicker(){
+  itemPicker.innerHTML = "";
+  bundle.items.forEach((item, i) => {
+    const b = document.createElement("button");
+    b.textContent = item.title;
+    if (i === currentItemIndex && currentMode === "3d") b.classList.add("active");
+    b.addEventListener("click", () => {
+      currentItemIndex = i;
+      renderItemPicker();
+      if (currentMode === "3d") load3D();
+    });
+    itemPicker.appendChild(b);
+  });
+  itemPicker.style.display = currentMode === "3d" ? "flex" : "none";
+}
+
+function load3D(){
+  hotspotPanel.classList.remove("show");
+  if (threeSession) threeSession.stop();
+  const item = bundle.items[currentItemIndex];
+  hudTitle.textContent = item.title;
+  hudStatusText.textContent = "Mod 3D — putar & ketik bahagian oren";
+  threeSession = start3DViewer(document.getElementById("stage"), item, {
+    onHotspotClick: showHotspot
+  });
+}
+
+async function loadAR(){
+  hotspotPanel.classList.remove("show");
+  hudStatusText.textContent = "Memulakan kamera…";
+  arSession = await startARViewer(document.getElementById("ar-container"), topicId, bundle.items, {
+    onTargetFound: (item) => { hudTitle.textContent = item.title; hudStatusText.textContent = "Kad dikesan ✓"; },
+    onTargetLost: () => { hudStatusText.textContent = "Cari kad…"; },
+    onHotspotClick: showHotspot,
+    onError: (err) => {
+      console.error(err);
+      hudStatusText.textContent = "AR gagal — kembali ke Mod 3D";
+      switchMode("3d");
+    }
+  });
+  if (arSession) hudStatusText.textContent = "Cari kad…";
+}
+
+function switchMode(mode){
+  if (mode === currentMode) return;
+  hotspotPanel.classList.remove("show");
+  if (mode === "3d") {
+    if (arSession) { arSession.stop(); arSession = null; }
+    document.getElementById("stage").style.display = "block";
+    document.getElementById("ar-container").style.display = "none";
+    btn3d.classList.add("active"); btnAr.classList.remove("active");
+    toastAr.style.display = "none";
+    currentMode = "3d";
+    renderItemPicker();
+    load3D();
+  } else {
+    if (threeSession) { threeSession.stop(); threeSession = null; }
+    document.getElementById("stage").style.display = "none";
+    document.getElementById("ar-container").style.display = "block";
+    btnAr.classList.add("active"); btn3d.classList.remove("active");
+    currentMode = "ar";
+    renderItemPicker();
+    hudTitle.textContent = "Cari sebarang kad…";
+    toastAr.style.display = "block";
+  }
+}
+
+btn3d.addEventListener("click", () => switchMode("3d"));
+btnAr.addEventListener("click", () => switchMode("ar"));
+document.getElementById("toast-ar-close").addEventListener("click", () => { toastAr.style.display = "none"; loadAR(); });
+
+async function boot(){
+  if (!topicId || !apiConfigured()){
+    hudTitle.textContent = "Ralat konfigurasi";
+    hudStatusText.textContent = !topicId ? "Topik tiada dalam URL" : "API belum disambung";
+    return;
+  }
+  try {
+    bundle = await Api.getTopicBundle(topicId);
+    if (!bundle.items.length){
+      hudTitle.textContent = bundle.topic.title;
+      hudStatusText.textContent = "Tiada item dalam topik ini lagi";
+      return;
+    }
+    document.title = bundle.topic.title;
+    renderItemPicker();
+    load3D();
+  } catch (err) {
+    hudTitle.textContent = "Ralat memuatkan";
+    hudStatusText.textContent = err.message;
+  }
+}
+boot();
+</script>
+</body>
+</html>

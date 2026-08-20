@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — Kad AR Kimpalan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../shared/css/style.css">
+</head>
+<body>
+
+<div class="hazard"></div>
+
+<div id="lock-view" class="lock-screen">
+  <h1>Admin</h1>
+  <p style="font-size:13px;color:var(--text-dim);margin-bottom:20px;">Masukkan kata laluan admin (ditetapkan dalam Code.gs).</p>
+  <input type="password" id="passcode-input" placeholder="Kata laluan">
+  <button class="btn block" id="btn-unlock">Masuk</button>
+  <p class="field-error show" id="lock-error" style="display:none;"></p>
+</div>
+
+<div id="admin-view" style="display:none;">
+  <header class="top">
+    <p class="eyebrow">Admin · Kad AR Kimpalan</p>
+    <h1>Urus Kandungan</h1>
+    <p class="subhead">Tambah, edit, padam topik, item, hotspot dan soalan. Perubahan terus disimpan ke Google Sheet.</p>
+  </header>
+
+  <main>
+    <div class="admin-tabs" id="admin-tabs"></div>
+    <div id="msg" class="panel" style="display:none;"></div>
+
+    <div class="panel" id="table-panel">
+      <h2 id="table-title">—</h2>
+      <div class="admin-table-wrap">
+        <table id="data-table">
+          <thead id="table-head"></thead>
+          <tbody id="table-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel" id="form-panel">
+      <h2 id="form-title">Tambah Baru</h2>
+      <form id="data-form"></form>
+      <div style="display:flex;gap:10px;">
+        <button type="submit" form="data-form" class="btn">Simpan</button>
+        <button type="button" class="btn ghost" id="btn-cancel-edit" style="display:none;">Batal Edit</button>
+      </div>
+    </div>
+
+    <div class="panel" id="scores-panel" style="display:none;">
+      <h2>Reset Papan Pendahulu</h2>
+      <label for="reset-topic">Topik (kosongkan untuk reset SEMUA)</label>
+      <input type="text" id="reset-topic" placeholder="cth: smaw">
+      <button class="btn danger" id="btn-reset-scores">Reset Skor</button>
+    </div>
+  </main>
+</div>
+
+<script src="../shared/js/api.js"></script>
+<script>
+const SHEET_CONFIGS = {
+  Topics: { fields: [
+    { key:"topic_id", label:"ID Topik", type:"text", primary:true },
+    { key:"title", label:"Tajuk", type:"text" },
+    { key:"description", label:"Penerangan", type:"textarea" },
+    { key:"accent_color", label:"Warna (hex, cth #ff7a1a)", type:"text" }
+  ]},
+  Items: { fields: [
+    { key:"item_id", label:"ID Item", type:"text", primary:true },
+    { key:"topic_id", label:"ID Topik", type:"text" },
+    { key:"title", label:"Tajuk", type:"text" },
+    { key:"target_index", label:"Target Index (0,1,2...)", type:"number" },
+    { key:"model_ref", label:"Model Ref (nama fungsi dalam models.js)", type:"text" },
+    { key:"summary", label:"Ringkasan", type:"textarea" },
+    { key:"specs", label:"Spesifikasi (pisah guna tanda | )", type:"textarea" }
+  ]},
+  Hotspots: { fields: [
+    { key:"hotspot_id", label:"ID Hotspot", type:"text", primary:true, auto:true },
+    { key:"item_id", label:"ID Item", type:"text" },
+    { key:"label", label:"Label", type:"text" },
+    { key:"info_text", label:"Maklumat", type:"textarea" },
+    { key:"pos_x", label:"Pos X (0 = auto)", type:"number" },
+    { key:"pos_y", label:"Pos Y (0 = auto)", type:"number" },
+    { key:"pos_z", label:"Pos Z (0 = auto)", type:"number" }
+  ]},
+  Questions: { fields: [
+    { key:"question_id", label:"ID Soalan", type:"text", primary:true, auto:true },
+    { key:"item_id", label:"ID Item", type:"text" },
+    { key:"prompt", label:"Soalan", type:"textarea" },
+    { key:"option_a", label:"Pilihan A", type:"text" },
+    { key:"option_b", label:"Pilihan B", type:"text" },
+    { key:"option_c", label:"Pilihan C", type:"text" },
+    { key:"option_d", label:"Pilihan D", type:"text" },
+    { key:"correct_option", label:"Jawapan Betul (a/b/c/d)", type:"text" }
+  ]},
+  Scores: { fields: [
+    { key:"timestamp", label:"Masa" }, { key:"nama", label:"Nama" }, { key:"kelas", label:"Kelas" },
+    { key:"institusi", label:"Institusi" }, { key:"topic_id", label:"Topik" },
+    { key:"score", label:"Skor" }, { key:"total_possible", label:"Maks" }, { key:"percentage", label:"%" }
+  ], readOnly:true }
+};
+
+let passcode = null;
+let currentSheet = "Topics";
+let editingId = null;
+
+document.getElementById("btn-unlock").addEventListener("click", () => {
+  const val = document.getElementById("passcode-input").value.trim();
+  if (!val){
+    document.getElementById("lock-error").textContent = "Sila masukkan kata laluan.";
+    document.getElementById("lock-error").style.display = "block";
+    return;
+  }
+  passcode = val;
+  sessionStorage.setItem("adminPasscode", val);
+  document.getElementById("lock-view").style.display = "none";
+  document.getElementById("admin-view").style.display = "block";
+  boot();
+});
+
+const savedPasscode = sessionStorage.getItem("adminPasscode");
+if (savedPasscode){
+  passcode = savedPasscode;
+  document.getElementById("lock-view").style.display = "none";
+  document.getElementById("admin-view").style.display = "block";
+}
+
+function showMsg(text, isError){
+  const msg = document.getElementById("msg");
+  msg.style.display = "block";
+  msg.innerHTML = `<p style="font-size:13px;color:${isError ? 'var(--bad)' : 'var(--good)'};margin:0;">${text}</p>`;
+  setTimeout(() => { msg.style.display = "none"; }, 4000);
+}
+
+function renderTabs(){
+  const tabs = document.getElementById("admin-tabs");
+  tabs.innerHTML = "";
+  Object.keys(SHEET_CONFIGS).forEach(name => {
+    const b = document.createElement("button");
+    b.textContent = name;
+    if (name === currentSheet) b.classList.add("active");
+    b.addEventListener("click", () => { currentSheet = name; editingId = null; renderTabs(); loadSheet(); });
+    tabs.appendChild(b);
+  });
+}
+
+function renderForm(){
+  const cfg = SHEET_CONFIGS[currentSheet];
+  const formPanel = document.getElementById("form-panel");
+  const scoresPanel = document.getElementById("scores-panel");
+  if (cfg.readOnly){
+    formPanel.style.display = "none";
+    scoresPanel.style.display = "block";
+    return;
+  }
+  formPanel.style.display = "block";
+  scoresPanel.style.display = "none";
+
+  const form = document.getElementById("data-form");
+  form.innerHTML = "";
+  cfg.fields.forEach(f => {
+    const wrap = document.createElement("div");
+    const label = document.createElement("label");
+    label.textContent = f.label + (f.auto ? " (kosongkan = auto)" : "");
+    wrap.appendChild(label);
+    const input = f.type === "textarea" ? document.createElement("textarea") : document.createElement("input");
+    if (f.type !== "textarea") input.type = f.type === "number" ? "number" : "text";
+    input.id = "field-" + f.key;
+    if (f.primary && editingId) input.disabled = true;
+    wrap.appendChild(input);
+    form.appendChild(wrap);
+  });
+  document.getElementById("form-title").textContent = editingId ? `Edit: ${editingId}` : "Tambah Baru";
+  document.getElementById("btn-cancel-edit").style.display = editingId ? "inline-flex" : "none";
+}
+
+document.getElementById("btn-cancel-edit").addEventListener("click", () => {
+  editingId = null;
+  renderForm();
+});
+
+document.getElementById("data-form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const cfg = SHEET_CONFIGS[currentSheet];
+  const payload = {};
+  cfg.fields.forEach(f => {
+    const el = document.getElementById("field-" + f.key);
+    payload[f.key] = el.value;
+  });
+  const primaryField = cfg.fields.find(f => f.primary).key;
+  if (editingId) payload[primaryField] = editingId;
+
+  try {
+    await Api.adminSave(passcode, currentSheet, payload);
+    showMsg("Disimpan.");
+    editingId = null;
+    renderForm();
+    loadSheet();
+  } catch (err) {
+    showMsg(err.message, true);
+    if (String(err.message).includes("laluan")) {
+      sessionStorage.removeItem("adminPasscode");
+    }
+  }
+});
+
+async function loadSheet(){
+  const cfg = SHEET_CONFIGS[currentSheet];
+  document.getElementById("table-title").textContent = currentSheet;
+  const head = document.getElementById("table-head");
+  const body = document.getElementById("table-body");
+  head.innerHTML = "";
+  body.innerHTML = `<tr><td colspan="10" style="color:var(--text-dim);">Memuatkan…</td></tr>`;
+  renderForm();
+
+  try {
+    const rows = await Api.adminList(currentSheet);
+    const trh = document.createElement("tr");
+    cfg.fields.forEach(f => {
+      const th = document.createElement("th");
+      th.textContent = f.label;
+      trh.appendChild(th);
+    });
+    if (!cfg.readOnly){
+      const th = document.createElement("th");
+      th.textContent = "Tindakan";
+      trh.appendChild(th);
+    }
+    head.appendChild(trh);
+
+    body.innerHTML = "";
+    if (!rows.length){
+      body.innerHTML = `<tr><td colspan="${cfg.fields.length+1}" style="color:var(--text-dim);">Tiada rekod.</td></tr>`;
+      return;
+    }
+    rows.forEach(row => {
+      const tr = document.createElement("tr");
+      cfg.fields.forEach(f => {
+        const td = document.createElement("td");
+        td.textContent = row[f.key] !== undefined ? row[f.key] : "";
+        tr.appendChild(td);
+      });
+      if (!cfg.readOnly){
+        const td = document.createElement("td");
+        const primaryField = cfg.fields.find(f => f.primary).key;
+        const rowId = row[primaryField];
+        const editBtn = document.createElement("button");
+        editBtn.className = "btn ghost"; editBtn.textContent = "Edit";
+        editBtn.addEventListener("click", () => {
+          editingId = rowId;
+          renderForm();
+          cfg.fields.forEach(f => {
+            const el = document.getElementById("field-" + f.key);
+            if (el) el.value = row[f.key] !== undefined ? row[f.key] : "";
+          });
+          window.scrollTo({ top: document.getElementById("form-panel").offsetTop - 20, behavior: "smooth" });
+        });
+        const delBtn = document.createElement("button");
+        delBtn.className = "btn danger"; delBtn.textContent = "Padam";
+        delBtn.addEventListener("click", async () => {
+          if (!confirm(`Padam rekod "${rowId}"?`)) return;
+          try {
+            await Api.adminDelete(passcode, currentSheet, rowId);
+            showMsg("Dipadam.");
+            loadSheet();
+          } catch (err) { showMsg(err.message, true); }
+        });
+        const actions = document.createElement("div");
+        actions.className = "row-actions";
+        actions.appendChild(editBtn); actions.appendChild(delBtn);
+        td.appendChild(actions);
+        tr.appendChild(td);
+      }
+      body.appendChild(tr);
+    });
+  } catch (err) {
+    body.innerHTML = `<tr><td colspan="10" style="color:var(--bad);">${err.message}</td></tr>`;
+  }
+}
+
+document.getElementById("btn-reset-scores").addEventListener("click", async () => {
+  const topic = document.getElementById("reset-topic").value.trim();
+  const label = topic ? `topik "${topic}"` : "SEMUA topik";
+  if (!confirm(`Reset skor untuk ${label}? Tindakan ini tidak boleh dibatalkan.`)) return;
+  try {
+    await Api.resetScores(passcode, topic || undefined);
+    showMsg("Papan pendahulu direset.");
+  } catch (err) { showMsg(err.message, true); }
+});
+
+function boot(){
+  if (!apiConfigured()){
+    showMsg("API_URL belum diisi dalam shared/js/api.js", true);
+    return;
+  }
+  renderTabs();
+  loadSheet();
+}
+if (passcode) boot();
+</script>
+</body>
+</html>
