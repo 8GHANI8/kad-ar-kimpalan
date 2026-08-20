@@ -3,7 +3,7 @@
 // TUKAR API_URL selepas kamu deploy Apps Script (lihat README.md Langkah 3).
 // ============================================================================
 
-const API_URL = "PASTE_APPS_SCRIPT_WEB_APP_URL_HERE";
+const API_URL = "https://script.google.com/macros/s/AKfycbz1IikJUXsv3NY8qLqNcI2w8ewzDQRA_X50ebGZlO63UU2chy4JHq_pKHIytCvtW0X-bg/exec";
 
 const Api = {
   async get(action, params = {}) {
