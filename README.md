@@ -5,7 +5,17 @@ Admin (urus kandungan). Ikut langkah 1 hingga 7 secara berurutan — jangan
 langkau, setiap langkah bergantung pada langkah sebelumnya.
 
 **Struktur keseluruhan:** GitHub Pages (hos webapp) → Google Apps Script (API)
-→ Google Sheet (data & kandungan).
+→ Google Sheet (data & kandungan). Pengesanan AR guna penanda **ArUco**
+(bukan gambar) melalui library **js-aruco2**.
+
+> ⚠️ **Nota jujur tentang Langkah 6-7:** bahagian pengesanan kamera + pose
+> 3D (di mana model diletak/diarah berbanding kad) dibina berdasarkan
+> dokumentasi rasmi library, tetapi tidak dapat diuji di sini dengan kamera
+> sebenar semasa dibina. Kemungkinan besar ia berfungsi terus, tapi kalau
+> model nampak di tempat/arah yang salah pada ujian pertama kamu, ini
+> **bukan tanda sistem rosak** — cuma perlu satu laras cepat guna panel
+> "Debug AR" terus dalam skrin (tiada kod perlu disentuh). Rujuk
+> Troubleshooting di bawah.
 
 ---
 
@@ -88,8 +98,8 @@ langkau, setiap langkah bergantung pada langkah sebelumnya.
 4. Dalam repo kosong tadi, klik **uploading an existing file** (atau
    **Add file → Upload files**).
 5. Drag SEMUA folder & fail dari kit ini (`student/`, `admin/`, `shared/`,
-   `targets/`, `README.md` — **tak perlu** upload folder `apps-script/`,
-   ia dah masuk dalam Google Sheet) ke dalam kotak upload GitHub.
+   `README.md` — **tak perlu** upload folder `apps-script/`, ia dah masuk
+   dalam Google Sheet) ke dalam kotak upload GitHub.
 6. Scroll bawah, klik **Commit changes**.
 7. Pergi ke tab **Settings** (repo yang sama) → **Pages** (menu kiri).
 8. Di bawah "Build and deployment" → **Source**: pilih **Deploy from a branch**.
@@ -110,29 +120,38 @@ langkau, setiap langkah bergantung pada langkah sebelumnya.
 **Nak edit fail lepas ni?** Klik fail dalam GitHub → ikon pensel (Edit) →
 ubah → **Commit changes**. GitHub Pages akan auto-update dalam 1-2 minit.
 
-## LANGKAH 6 — Sediakan Kad AR Fizikal
+## LANGKAH 6 — Sediakan Kad AR Fizikal (Penanda ArUco)
 
-Ini langkah kreatif — buat SEBELUM pameran/kelas, bukan waktu build sistem.
+Sistem ini guna **penanda ArUco** — corak grid hitam/putih ringkas, bukan
+gambar. Setiap penanda ada **ID unik** yang dikesan terus oleh kamera; tiada
+langkah "compile" fail diperlukan.
 
-1. Reka satu kad/kertas untuk **setiap item** (bukan setiap topik) — contoh
-   topik SMAW ada 3 kad: Mesin, Pemegang Elektrod, Tanglung Bumi. Setiap kad
-   perlu corak/imej unik, padat dengan butiran visual (bukan warna kosong).
-   Boleh guna Canva — reka satu "keluarga" corak yang nampak sepadan (border
-   sama, glyph tengah lain-lain).
-2. **Susunan penting**: urutan kamu compile kad MESTI sama dengan
-   `target_index` yang kamu masukkan dalam Sheet `Items` untuk setiap item
-   (0, 1, 2, ...). Kad kedudukan 0 dalam compiler = item dengan
-   `target_index = 0`.
-3. Buka compiler percuma: **https://hiukim.github.io/mind-ar-js-doc/tools/compile/**
-4. Drag SEMUA kad **untuk satu topik** ke compiler (ikut urutan Langkah 6.2),
-   klik **Start**, tunggu proses siap, klik **Download**. Ini turunkan fail
-   `targets.mind`.
-5. **Tukar nama fail** kepada `{topic_id}.mind` — contoh untuk topik `smaw`,
-   namakan `smaw.mind`.
-6. Upload fail ini ke folder `targets/` dalam repo GitHub kamu (Langkah 5.4-6,
-   guna cara "Add file → Upload files" yang sama).
-7. Ulang Langkah 6.3-6.6 untuk setiap topik lain yang kamu ada.
-8. Cetak kad-kad tersebut (kertas/kadbod), laminate untuk pameran.
+1. Buka pencipta penanda rasmi (dari library yang sama kita guna dalam kod,
+   penting supaya penanda serasi 100%):
+   **https://damianofalcioni.github.io/js-aruco2/samples/marker-creator/marker-creator.html?dictionary=ARUCO**
+2. Untuk setiap item (bukan setiap topik) — contoh topik SMAW ada 3 item:
+   Mesin, Pemegang Elektrod, Tanglung Bumi — jana SATU penanda dengan ID
+   berlainan. **ID penanda = nilai `target_index` untuk item itu dalam
+   Sheet `Items`.** Contoh: Mesin → ID 0, Pemegang Elektrod → ID 1,
+   Tanglung Bumi → ID 2.
+3. Muat turun/cetak setiap penanda (kekalkan border hitam luar penanda -
+   itu bahagian yang dikesan kamera, jangan potong/reka bentuk semula
+   corak grid itu sendiri). Boleh tambah label kecil DI LUAR border hitam
+   (contoh nama item di bawah penanda) untuk rujukan guru sahaja - pastikan
+   label tak menyentuh/menutupi grid.
+4. **ID boleh diguna semula merentasi topik berlainan** (ID 0 dalam topik
+   SMAW dan ID 0 dalam topik PPE tidak akan berkonflik, sebab app hanya
+   memuatkan item bagi topik yang sedang dibuka) - tapi untuk elak
+   kekeliruan semasa mencetak/susun kad, disyorkan guna julat ID berlainan
+   bagi setiap topik (cth: SMAW guna ID 0-4, PPE guna ID 10-14).
+5. Cetak (kertas/kadbod), laminate untuk pameran. Penanda ArUco tahan
+   sudut condong dan cahaya lemah dengan baik - tapi elakkan silauan
+   terus/pantulan kilat pada permukaan bercetak.
+
+**Nota tentang saiz cetakan:** semakin besar penanda dicetak, semakin jauh ia
+boleh dikesan. Untuk kegunaan tangan (dipegang dekat kamera), 6-8cm persegi
+sudah memadai. Untuk pameran (dipamer di atas meja, dikesan dari agak jauh),
+cetak lebih besar (12-15cm).
 
 ## LANGKAH 7 — Uji
 
@@ -158,8 +177,8 @@ Ini langkah kreatif — buat SEBELUM pameran/kelas, bukan waktu build sistem.
 | `Questions` | Soalan MCQ susulan untuk setiap item (kuiz) | 1 soalan per item (boleh tambah lebih) |
 | `Scores` | Rekod setiap kali pelajar habiskan kuiz | Nama, Kelas, Institusi, Skor |
 
-**`target_index`** dalam `Items` mesti padan dengan urutan kad dalam fail
-`.mind` topik berkenaan (Langkah 6.2-6.4).
+**`target_index`** dalam `Items` mesti sama dengan **ID penanda ArUco**
+yang dicetak pada kad fizikal item itu (Langkah 6.2).
 
 **`model_ref`** dalam `Items` mesti sama dengan nama fungsi dalam
 `shared/js/models.js` (contoh `buildSMAWMachine`). Kalau tak padan, item
@@ -198,10 +217,23 @@ Bila kamu dah ada fail `.glb` (dari scan photogrammetry atau Blender):
   buat "New version" deploy semula (Langkah 3, nota di bawah).
 - **Data tak muncul dalam webapp lepas edit di admin** → cuba refresh
   (Ctrl+Shift+R / hard refresh) — browser kadang cache fetch lama.
-- **AR Mode terus tukar ke ralat** → fail `targets/{topic_id}.mind` belum
-  wujud atau nama fail tak padan `topic_id` dalam Sheet. Semak Langkah 6.5-6.
+- **Kad dikesan tapi model tak muncul / muncul di tempat salah / model
+  terbalik atau bergerak berlawanan arah kad** → ini bahagian yang PALING
+  mungkin perlu dilaraskan secara langsung (kami tak dapat uji dengan kamera
+  sebenar semasa bina sistem ini). Dalam skrin AR, tekan butang kecil
+  **"⚙ Debug AR"** (bawah kiri) → toggle suis **Flip X / Flip Y / Flip Z**
+  satu-satu sehingga model nampak betul berbanding kad. Nilai akan disimpan
+  automatik dalam peranti tersebut. Kalau tak jumpa kombinasi yang betul,
+  hantar saya penerangan/gambar apa yang kamu nampak dan saya boleh
+  laraskan nilai default dalam kod.
+- **ID penanda tak sepadan item yang betul** → semak `target_index` dalam
+  Sheet `Items` sama dengan ID yang kamu jana dalam Langkah 6.2 untuk kad
+  tersebut.
 - **Kamera tak minta kebenaran** → webapp dibuka guna `file://` terus, bukan
   melalui GitHub Pages punya `https://`. Guna URL dari Langkah 5.10-11.
+- **Pengesanan terasa perlahan/tersekat-sekat** → biasa pada telefon lama;
+  cuba kurangkan pencahayaan silau pada penanda, atau cetak penanda lebih
+  besar supaya lebih mudah dikesan dari jarak yang sama.
 - **Ralat "Sheet tidak wujud"** → `initializeSheets` belum dijalankan
   berjaya, atau nama tab dalam Sheet telah ditukar secara manual. Jangan
   tukar nama tab `Topics/Items/Hotspots/Questions/Scores`.

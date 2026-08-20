@@ -12,11 +12,15 @@
 {
   "imports": {
     "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
-    "mindar-image-three": "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
   }
 }
 </script>
+<!-- js-aruco2: pengesan penanda ArUco (global AR / POS / CV / SVD) -->
+<script src="https://cdn.jsdelivr.net/gh/damianofalcioni/js-aruco2@master/src/cv.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/damianofalcioni/js-aruco2@master/src/aruco.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/damianofalcioni/js-aruco2@master/src/svd.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/damianofalcioni/js-aruco2@master/src/posit1.js"></script>
 </head>
 <body class="viewer">
 
@@ -47,7 +51,7 @@
 
   <div class="instruction-toast" id="toast-ar" style="display:none;">
     <h3>Mod AR</h3>
-    <p id="toast-ar-text">Benarkan akses kamera, kemudian halakan kamera ke mana-mana kad topik ini.</p>
+    <p id="toast-ar-text">Benarkan akses kamera, kemudian halakan kamera ke mana-mana kad penanda ArUco topik ini.</p>
     <button class="btn" id="toast-ar-close">Buka Kamera</button>
   </div>
 </div>

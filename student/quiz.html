@@ -12,11 +12,15 @@
 {
   "imports": {
     "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
-    "mindar-image-three": "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
   }
 }
 </script>
+<!-- js-aruco2: pengesan penanda ArUco (global AR / POS / CV / SVD) -->
+<script src="https://cdn.jsdelivr.net/gh/damianofalcioni/js-aruco2@master/src/cv.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/damianofalcioni/js-aruco2@master/src/aruco.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/damianofalcioni/js-aruco2@master/src/svd.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/damianofalcioni/js-aruco2@master/src/posit1.js"></script>
 </head>
 <body class="viewer">
 
@@ -173,7 +177,7 @@ async function startQuizSession(){
     onTargetLost: (item) => { visibleItemIds.delete(item.item_id); updateConfirmState(); },
     onError: (err) => {
       console.error(err);
-      hudStatusText.textContent = "AR gagal dimuat — semak sambungan internet & targets.mind";
+      hudStatusText.textContent = "AR gagal dimuat — semak kebenaran kamera & sambungan internet";
     }
   });
   if (arSession){
