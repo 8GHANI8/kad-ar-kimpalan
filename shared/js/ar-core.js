@@ -199,7 +199,7 @@ function buildDebugPanel(container, flipConfig, onFlipChange, initialScale, onSc
   btn.textContent = "⚙ LARAS AR";
   btn.style.cssText = "position:absolute;top:56px;left:14px;z-index:50;font-family:monospace;font-weight:600;font-size:13px;padding:10px 16px;background:#ff7a1a;color:#111;border:none;border-radius:24px;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.5);";
   const panel = document.createElement("div");
-  panel.style.cssText = "position:absolute;top:104px;left:14px;z-index:50;background:rgba(10,10,11,.97);border:2px solid #ff7a1a;border-radius:6px;padding:14px 16px;display:none;font-family:monospace;font-size:12px;color:#f2f1ee;min-width:200px;box-shadow:0 4px 16px rgba(0,0,0,.6);";
+  panel.style.cssText = "position:absolute;top:152px;left:14px;z-index:50;background:rgba(10,10,11,.97);border:2px solid #ff7a1a;border-radius:6px;padding:14px 16px;display:none;font-family:monospace;font-size:12px;color:#f2f1ee;min-width:200px;box-shadow:0 4px 16px rgba(0,0,0,.6);";
   panel.innerHTML = `
     <div style="color:#ff7a1a;text-transform:uppercase;font-size:11px;letter-spacing:.08em;margin-bottom:10px;">Saiz Model</div>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
@@ -213,6 +213,7 @@ function buildDebugPanel(container, flipConfig, onFlipChange, initialScale, onSc
     <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><input type="checkbox" id="flip-y" style="width:16px;height:16px;"> Flip Y</label>
     <label style="display:flex;align-items:center;gap:8px;margin-bottom:4px;"><input type="checkbox" id="flip-z" style="width:16px;height:16px;"> Flip Z</label>
     <p style="font-size:10px;color:#a8a8ac;margin:8px 0 0;line-height:1.5;">Toggle kalau model terbalik/tersalah arah berbanding kad.</p>
+    <p style="font-size:10px;color:#a8a8ac;margin:10px 0 0;line-height:1.5;border-top:1px solid #333;padding-top:10px;">Seret satu jari atas model = pusing bebas. Tekan butang <strong style="color:#3ecf8e;">🔓 IKUT KAD</strong> untuk kunci model diam (senang letak kad, lepas tangan).</p>
   `;
   container.appendChild(btn);
   container.appendChild(panel);
@@ -237,6 +238,22 @@ function buildDebugPanel(container, flipConfig, onFlipChange, initialScale, onSc
   });
 
   return { btn, panel, refreshScaleLabel };
+}
+
+function buildLockButton(container, getLocked, setLocked){
+  const btn = document.createElement("button");
+  function render(){
+    const on = getLocked();
+    btn.textContent = on ? "🔒 TERKUNCI" : "🔓 IKUT KAD";
+    btn.style.background = on ? "#3ecf8e" : "rgba(0,0,0,.6)";
+    btn.style.color = on ? "#111" : "#f2f1ee";
+    btn.style.borderColor = on ? "#3ecf8e" : "#333";
+  }
+  btn.style.cssText = "position:absolute;top:104px;left:14px;z-index:50;font-family:monospace;font-weight:600;font-size:12px;padding:9px 14px;border:1px solid #333;border-radius:24px;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.5);";
+  render();
+  container.appendChild(btn);
+  btn.addEventListener("click", () => { setLocked(!getLocked()); render(); });
+  return btn;
 }
 
 export async function startARViewer(container, topicId, items, {
@@ -302,11 +319,18 @@ export async function startARViewer(container, topicId, items, {
   const allHotspotMeshes = [];
   const lostCounters = {};
   const wasVisible = {};
+  const frozenPose = {}; // item_id -> {rotation, translation} - pose terkini (atau beku bila locked)
   let currentModelScale = loadModelScale();
+  let locked = false;
+
+  // offset putaran manual (drag jari) - dilapis ATAS orientasi kad, jadi
+  // pelajar boleh pusing model dengan jari tanpa perlu gerak kad fizikal.
+  const rotationOffset = new THREE.Euler(0, 0, 0);
+  const scaleMatrix = new THREE.Matrix4();
+  const offsetMatrix = new THREE.Matrix4();
 
   items.forEach(item => {
     const { group, hotspotMeshes } = buildItemVisual(item);
-    group.scale.setScalar(currentModelScale);
     group.matrixAutoUpdate = false;
     group.visible = false;
     scene.add(group);
@@ -316,16 +340,28 @@ export async function startARViewer(container, topicId, items, {
     hotspotMeshes.forEach(h => allHotspotMeshes.push(h));
   });
 
+  // BUG DIBAIKI: dahulu group.scale ditetapkan tapi diabaikan terus sebab
+  // group.matrix ditulis semula PENUH setiap bingkai (matrixAutoUpdate=false)
+  // dari pose sahaja, tanpa skala. Sekarang skala dibina terus ke dalam
+  // matrix setiap bingkai - lihat buildFinalMatrix().
   function applyModelScale(v){
     currentModelScale = Math.min(6, Math.max(0.3, v));
-    Object.values(groupsByMarkerId).forEach(({ group }) => group.scale.setScalar(currentModelScale));
     saveModelScale(currentModelScale);
+  }
+
+  function buildFinalMatrix(rotation, translation){
+    scaleMatrix.makeScale(currentModelScale, currentModelScale, currentModelScale);
+    offsetMatrix.makeRotationFromEuler(rotationOffset);
+    return buildPoseMatrix(rotation, translation, flipConfig)
+      .multiply(offsetMatrix)
+      .multiply(scaleMatrix);
   }
 
   const flipConfig = loadFlipConfig();
   const debugPanel = buildDebugPanel(container, flipConfig, () => {}, currentModelScale, applyModelScale);
+  const lockBtn = buildLockButton(container, () => locked, (v) => { locked = v; });
 
-  // cubit-untuk-zoom (dua jari) - laras saiz model dalam AR secara langsung
+  // ============ isyarat sentuh: cubit=zoom, satu jari=putar/ketik ============
   let pinchStartDist = null;
   let pinchStartScale = currentModelScale;
   function touchDistance(touches){
@@ -333,23 +369,62 @@ export async function startARViewer(container, topicId, items, {
     const dy = touches[0].clientY - touches[1].clientY;
     return Math.sqrt(dx*dx + dy*dy);
   }
+
+  const raycastHit = makeRaycastHandler(camera, () => allHotspotMeshes, (hit) => {
+    if (onHotspotClick) onHotspotClick(hit);
+  });
+
+  const DRAG_THRESHOLD = 10; // px - lebih kecil dari ni dikira "ketik", bukan "seret"
+  const ROTATE_SENSITIVITY = 0.008;
+  let drag = null; // {startX, startY, lastX, lastY, moved}
+
+  function dragStart(x, y){ drag = { startX: x, startY: y, lastX: x, lastY: y, moved: false }; }
+  function dragMove(x, y){
+    if (!drag) return;
+    const dx = x - drag.lastX, dy = y - drag.lastY;
+    if (!drag.moved && Math.hypot(x - drag.startX, y - drag.startY) > DRAG_THRESHOLD) drag.moved = true;
+    if (drag.moved) {
+      rotationOffset.y += dx * ROTATE_SENSITIVITY;
+      rotationOffset.x += dy * ROTATE_SENSITIVITY;
+      drag.lastX = x; drag.lastY = y;
+    }
+  }
+  function dragEnd(){
+    if (drag && !drag.moved) raycastHit({ clientX: drag.lastX, clientY: drag.lastY }); // tak gerak = ketik (hotspot)
+    drag = null;
+  }
+
+  container.addEventListener("touchstart", (ev) => {
+    if (ev.touches.length === 1) dragStart(ev.touches[0].clientX, ev.touches[0].clientY);
+  }, { passive: true });
   container.addEventListener("touchmove", (ev) => {
-    if (ev.touches.length === 2){
+    if (ev.touches.length === 1) {
+      dragMove(ev.touches[0].clientX, ev.touches[0].clientY);
+    } else if (ev.touches.length === 2) {
       ev.preventDefault();
+      drag = null; // batalkan putaran satu-jari bila jari kedua turun
       const dist = touchDistance(ev.touches);
       if (pinchStartDist == null) { pinchStartDist = dist; pinchStartScale = currentModelScale; return; }
       applyModelScale(pinchStartScale * (dist / pinchStartDist));
       debugPanel.refreshScaleLabel(currentModelScale);
     }
   }, { passive: false });
-  container.addEventListener("touchend", (ev) => { if (ev.touches.length < 2) pinchStartDist = null; });
-  container.style.touchAction = "none";
-
-  const onPointerDown = makeRaycastHandler(camera, () => allHotspotMeshes, (hit) => {
-    if (onHotspotClick) onHotspotClick(hit);
+  container.addEventListener("touchend", (ev) => {
+    if (ev.touches.length === 0) { dragEnd(); pinchStartDist = null; }
   });
-  container.addEventListener("click", onPointerDown);
-  container.addEventListener("touchstart", onPointerDown, { passive: true });
+
+  // sokongan tetikus (untuk ujian di PC)
+  let mouseDown = false;
+  container.addEventListener("mousedown", (ev) => { mouseDown = true; dragStart(ev.clientX, ev.clientY); });
+  container.addEventListener("mousemove", (ev) => { if (mouseDown) dragMove(ev.clientX, ev.clientY); });
+  container.addEventListener("mouseup", () => { mouseDown = false; dragEnd(); });
+  container.addEventListener("wheel", (ev) => {
+    ev.preventDefault();
+    applyModelScale(currentModelScale - ev.deltaY * 0.0015);
+    debugPanel.refreshScaleLabel(currentModelScale);
+  }, { passive: false });
+
+  container.style.touchAction = "none";
 
   function onResize(){
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -375,8 +450,17 @@ export async function startARViewer(container, topicId, items, {
       }));
       const pose = posit.pose(corners);
       if (!pose) return;
-      const m = buildPoseMatrix(pose.bestRotation, pose.bestTranslation, flipConfig);
-      entry.group.matrix.copy(m);
+
+      // kalau TAK locked, kemaskini pose beku ke pose langsung terkini.
+      // kalau locked, langkau kemaskini - guna pose lama yang tersimpan,
+      // supaya model kekal diam walaupun kad bergerak, sementara
+      // putaran jari & zoom tetap berfungsi di atasnya.
+      if (!locked) {
+        frozenPose[entry.item.item_id] = { rotation: pose.bestRotation, translation: pose.bestTranslation };
+      }
+
+      const useP = frozenPose[entry.item.item_id] || { rotation: pose.bestRotation, translation: pose.bestTranslation };
+      entry.group.matrix.copy(buildFinalMatrix(useP.rotation, useP.translation));
       entry.group.visible = true;
       lostCounters[entry.item.item_id] = 0;
       if (!wasVisible[entry.item.item_id]) {
@@ -386,15 +470,18 @@ export async function startARViewer(container, topicId, items, {
     });
 
     // items yang tak dikesan bingkai ini - beri toleransi sebelum sorok
-    Object.values(groupsByMarkerId).forEach(({ group, item }) => {
-      if (seenIds.has(Number(item.target_index))) return;
-      lostCounters[item.item_id] += 1;
-      if (lostCounters[item.item_id] > LOST_GRACE_FRAMES && wasVisible[item.item_id]) {
-        group.visible = false;
-        wasVisible[item.item_id] = false;
-        onTargetLost && onTargetLost(item);
-      }
-    });
+    // (dilangkau sepenuhnya bila locked - model kekal walaupun kad hilang)
+    if (!locked) {
+      Object.values(groupsByMarkerId).forEach(({ group, item }) => {
+        if (seenIds.has(Number(item.target_index))) return;
+        lostCounters[item.item_id] += 1;
+        if (lostCounters[item.item_id] > LOST_GRACE_FRAMES && wasVisible[item.item_id]) {
+          group.visible = false;
+          wasVisible[item.item_id] = false;
+          onTargetLost && onTargetLost(item);
+        }
+      });
+    }
 
     renderer.render(scene, camera);
     requestAnimationFrame(frame);
@@ -406,8 +493,6 @@ export async function startARViewer(container, topicId, items, {
       running = false;
       stream.getTracks().forEach(t => t.stop());
       window.removeEventListener("resize", onResize);
-      container.removeEventListener("click", onPointerDown);
-      container.removeEventListener("touchstart", onPointerDown);
       container.innerHTML = "";
     }
   };
