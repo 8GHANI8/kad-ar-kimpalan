@@ -210,8 +210,13 @@ btnConfirm.addEventListener("click", () => {
 });
 
 // ---------- soalan susulan ----------
+// Kalau item ada lebih 1 soalan dalam Sheet "Questions" (item_id sama pada
+// beberapa baris), SATU dipilih secara rawak setiap kali kuiz dimainkan -
+// jadi kamu boleh tambah seberapa banyak soalan yang mahu untuk satu item,
+// pelajar akan nampak variasi lain kali cuba.
 function askFollowUpQuestion(item){
-  const q = (item.questions && item.questions[0]) || null;
+  const pool = item.questions || [];
+  const q = pool.length ? pool[Math.floor(Math.random() * pool.length)] : null;
   mcqOverlay.style.display = "flex";
   mcqFeedback.textContent = "";
   btnNextItem.style.display = "none";

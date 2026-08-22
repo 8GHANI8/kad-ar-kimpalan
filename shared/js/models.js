@@ -43,7 +43,7 @@ registerModel("buildGeneric", buildGeneric);
 // ------------------------------------------------------------- SMAW parts --
 registerModel("buildSMAWMachine", (THREE) => {
   const group = new THREE.Group();
-  const metal = new THREE.MeshStandardMaterial({ color: 0x2b2b2e, roughness: 0.6, metalness: 0.4 });
+  const metal = new THREE.MeshStandardMaterial({ color: 0x52555c, roughness: 0.6, metalness: 0.4 });
   const accent = new THREE.MeshStandardMaterial({ color: 0xff7a1a, roughness: 0.4, metalness: 0.2 });
 
   const box = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.5, 0.45), metal);
@@ -52,7 +52,7 @@ registerModel("buildSMAWMachine", (THREE) => {
   dial.rotation.x = Math.PI / 2;
   dial.position.set(0.2, 0.1, 0.24);
   group.add(dial);
-  const vent = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.02, 0.3), new THREE.MeshStandardMaterial({ color: 0x111113 }));
+  const vent = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.02, 0.3), new THREE.MeshStandardMaterial({ color: 0x3a3b40 }));
   vent.position.set(-0.05, 0.2, 0);
   group.add(vent);
 
@@ -62,7 +62,7 @@ registerModel("buildSMAWMachine", (THREE) => {
 
 registerModel("buildElectrodeHolder", (THREE) => {
   const group = new THREE.Group();
-  const rubber = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.9 });
+  const rubber = new THREE.MeshStandardMaterial({ color: 0x35363a, roughness: 0.9 });
   const accent = new THREE.MeshStandardMaterial({ color: 0xff7a1a, roughness: 0.4, metalness: 0.2 });
   const rodMat = new THREE.MeshStandardMaterial({ color: 0xcfcfd2, roughness: 0.3, metalness: 0.6 });
 
@@ -93,7 +93,7 @@ registerModel("buildElectrodeHolder", (THREE) => {
 registerModel("buildGroundClamp", (THREE) => {
   const group = new THREE.Group();
   const accent = new THREE.MeshStandardMaterial({ color: 0xff7a1a, roughness: 0.4, metalness: 0.2 });
-  const rubber = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.9 });
+  const rubber = new THREE.MeshStandardMaterial({ color: 0x35363a, roughness: 0.9 });
 
   const jawTop = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.05, 0.08), accent);
   jawTop.position.set(0, 0.05, 0);
@@ -115,8 +115,8 @@ registerModel("buildGroundClamp", (THREE) => {
 // -------------------------------------------------------------------- PPE --
 registerModel("buildHelmet", (THREE) => {
   const group = new THREE.Group();
-  const shell = new THREE.MeshStandardMaterial({ color: 0x1c1c1e, roughness: 0.5, metalness: 0.2 });
-  const visor = new THREE.MeshStandardMaterial({ color: 0x0d2b33, roughness: 0.2, metalness: 0.6 });
+  const shell = new THREE.MeshStandardMaterial({ color: 0x3c3e43, roughness: 0.5, metalness: 0.2 });
+  const visor = new THREE.MeshStandardMaterial({ color: 0x1d4a56, roughness: 0.2, metalness: 0.6 });
   const warn = new THREE.MeshStandardMaterial({ color: 0xffcc00, roughness: 0.5 });
 
   const dome = new THREE.Mesh(new THREE.SphereGeometry(0.28, 24, 16, 0, Math.PI * 2, 0, Math.PI * 0.62), shell);
