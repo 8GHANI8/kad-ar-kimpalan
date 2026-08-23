@@ -22,21 +22,15 @@ const MARKER_UNIT_SIZE = 1;
 const DEFAULT_MODEL_SCALE = 2.2;
 const LOST_GRACE_FRAMES = 5; // toleransi bingkai hilang sebelum model disorokkan (elak kelipan)
 
-// tetapan flip default untuk tukar paksi output pose js-aruco2 -> Three.js.
-// INI MUNGKIN PERLU DILARASKAN semasa ujian langsung dengan kamera sebenar -
-// guna panel "Debug AR" (butang kanan atas skrin AR) untuk toggle live,
-// nilai akan disimpan dalam localStorage peranti tersebut.
-const DEFAULT_FLIP = { x: false, y: true, z: true };
-
-function loadFlipConfig(){
-  try {
-    const saved = JSON.parse(localStorage.getItem("arFlipConfig"));
-    if (saved) return { ...DEFAULT_FLIP, ...saved };
-  } catch(e) { /* noop */ }
-  return { ...DEFAULT_FLIP };
+// Penukaran paksi pose (posit -> Three.js) kini betul secara matematik dan
+// TAK PERLU dilaraskan manual (lihat poseToQuatPos di bawah). Yang mungkin
+// perlu dilaraskan cuma "arah model" (facing180) - satu toggle mudah dalam
+// panel "Debug AR" kalau model authored menghadap arah bertentangan.
+function loadFacing180(){
+  return localStorage.getItem("arFacing180") === "1";
 }
-function saveFlipConfig(cfg){
-  localStorage.setItem("arFlipConfig", JSON.stringify(cfg));
+function saveFacing180(v){
+  localStorage.setItem("arFacing180", v ? "1" : "0");
 }
 function loadModelScale(){
   const saved = parseFloat(localStorage.getItem("arModelScale"));
@@ -193,21 +187,35 @@ export function start3DViewer(container, item, { onHotspotClick } = {}){
 }
 
 // ==================== AR MODE (kamera + pengesanan ArUco) =================
-function buildPoseMatrix(rotation, translation, flip){
-  const sx = flip.x ? -1 : 1;
-  const sy = flip.y ? -1 : 1;
-  const sz = flip.z ? -1 : 1;
+// Tukar pose dari js-aruco2/posit (konvensyen kamera: Z positif = masuk ke
+// dalam skrin) kepada Three.js (Z negatif = masuk ke dalam skrin). X & Y
+// dah diselaraskan awal lagi semasa proses corners (lihat pemprosesan
+// corners dalam gelung frame()).
+//
+// NOTA TEKNIKAL (kenapa versi lama rosak): tukar paksi Z dengan betul
+// memerlukan "conjugation" F*R*F (bukan sekadar darab terus dengan -1 pada
+// satu baris/lajur) - kalau tidak, hasilnya jadi CERMINAN (mirror), bukan
+// putaran sebenar. Cerminan nampak "OK" pada sudut tertentu tapi jadi pelik
+// (perlu 180° untuk hadap kamera, tapi 180° itu pula terbalikkan model) -
+// tepat macam yang dilaporkan semasa ujian. Versi di bawah betul secara
+// matematik (F*R*F, F=diag(1,1,-1)) - tiada lagi checkbox flip diperlukan.
+function poseToQuatPos(rotation, translation){
+  const r00=rotation[0][0], r01=rotation[0][1], r02=rotation[0][2];
+  const r10=rotation[1][0], r11=rotation[1][1], r12=rotation[1][2];
+  const r20=rotation[2][0], r21=rotation[2][1], r22=rotation[2][2];
   const m = new THREE.Matrix4();
   m.set(
-    rotation[0][0]*sx, rotation[0][1]*sx, rotation[0][2]*sx, translation[0]*sx,
-    rotation[1][0]*sy, rotation[1][1]*sy, rotation[1][2]*sy, translation[1]*sy,
-    rotation[2][0]*sz, rotation[2][1]*sz, rotation[2][2]*sz, translation[2]*sz,
-    0, 0, 0, 1
+     r00,  r01, -r02, 0,
+     r10,  r11, -r12, 0,
+    -r20, -r21,  r22, 0,
+     0,    0,    0,   1
   );
-  return m;
+  const q = new THREE.Quaternion().setFromRotationMatrix(m);
+  const p = new THREE.Vector3(translation[0], translation[1], -translation[2]);
+  return { q, p };
 }
 
-function buildDebugPanel(container, flipConfig, onFlipChange, initialScale, onScaleChange){
+function buildDebugPanel(container, initialScale, onScaleChange, initialFacing180, onFacingChange){
   // diletak di kiri-atas, kawasan yang KOSONG semasa mod AR (item-picker
   // hanya papar dalam mod 3D, target-banner kuiz di tengah) - dan diberi
   // gaya paling menonjol (latar oren pejal) supaya mustahil terlepas pandang.
@@ -223,23 +231,19 @@ function buildDebugPanel(container, flipConfig, onFlipChange, initialScale, onSc
       <span id="scale-value" style="flex:1;text-align:center;">1.5x</span>
       <button id="scale-up" style="flex:0 0 auto;font-size:16px;width:32px;height:32px;background:#232326;color:#f2f1ee;border:1px solid #333;border-radius:4px;cursor:pointer;">+</button>
     </div>
-    <p style="font-size:10px;color:#a8a8ac;margin:0 0 12px;">Atau cubit dua jari terus atas skrin.</p>
-    <div style="color:#ff7a1a;text-transform:uppercase;font-size:11px;letter-spacing:.08em;margin-bottom:8px;">Laras Orientasi</div>
-    <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><input type="checkbox" id="flip-x" style="width:16px;height:16px;"> Flip X</label>
-    <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><input type="checkbox" id="flip-y" style="width:16px;height:16px;"> Flip Y</label>
-    <label style="display:flex;align-items:center;gap:8px;margin-bottom:4px;"><input type="checkbox" id="flip-z" style="width:16px;height:16px;"> Flip Z</label>
-    <p style="font-size:10px;color:#a8a8ac;margin:8px 0 0;line-height:1.5;">Toggle kalau model terbalik/tersalah arah berbanding kad.</p>
-    <p style="font-size:10px;color:#a8a8ac;margin:10px 0 0;line-height:1.5;border-top:1px solid #333;padding-top:10px;">Seret satu jari atas model = pusing bebas. Tekan butang <strong style="color:#3ecf8e;">🔓 IKUT KAD</strong> untuk kunci model diam (senang letak kad, lepas tangan).</p>
+    <p style="font-size:10px;color:#a8a8ac;margin:0 0 12px;">Atau cubit dua jari terus atas skrin (dua jari juga boleh seret untuk gerak model).</p>
+    <div style="color:#ff7a1a;text-transform:uppercase;font-size:11px;letter-spacing:.08em;margin-bottom:8px;">Arah Model</div>
+    <label style="display:flex;align-items:center;gap:8px;margin-bottom:4px;"><input type="checkbox" id="facing-180" style="width:16px;height:16px;"> Pusing 180° (model menghadap terbalik)</label>
+    <p style="font-size:10px;color:#a8a8ac;margin:8px 0 0;line-height:1.5;">Toggle SEKALI kalau model sentiasa membelakangkan kamera secara konsisten.</p>
+    <p style="font-size:10px;color:#a8a8ac;margin:10px 0 0;line-height:1.5;border-top:1px solid #333;padding-top:10px;">Seret SATU jari atas model = pusing bebas. Seret DUA jari = gerak (pan) model. Tekan butang <strong style="color:#3ecf8e;">🔓 IKUT KAD</strong> untuk kunci model diam (senang letak kad, lepas tangan).</p>
   `;
   container.appendChild(btn);
   container.appendChild(panel);
   btn.addEventListener("click", () => { panel.style.display = panel.style.display === "none" ? "block" : "none"; });
 
-  ["x","y","z"].forEach(axis => {
-    const cb = panel.querySelector(`#flip-${axis}`);
-    cb.checked = !!flipConfig[axis];
-    cb.addEventListener("change", () => { flipConfig[axis] = cb.checked; saveFlipConfig(flipConfig); onFlipChange(); });
-  });
+  const facingCb = panel.querySelector("#facing-180");
+  facingCb.checked = !!initialFacing180;
+  facingCb.addEventListener("change", () => onFacingChange(facingCb.checked));
 
   const scaleValueEl = panel.querySelector("#scale-value");
   function refreshScaleLabel(v){ scaleValueEl.textContent = v.toFixed(1) + "x"; }
@@ -335,15 +339,19 @@ export async function startARViewer(container, topicId, items, {
   const allHotspotMeshes = [];
   const lostCounters = {};
   const wasVisible = {};
-  const frozenPose = {}; // item_id -> {rotation, translation} - pose terkini (atau beku bila locked)
+  const smoothedQuat = {}; // item_id -> THREE.Quaternion (pose halus, dikemaskini setiap bingkai bila tak locked)
+  const smoothedPos = {};  // item_id -> THREE.Vector3
+  const SMOOTH_ALPHA = 0.35; // 0=beku sepenuhnya, 1=ikut mentah (bergegar). 0.35 = seimbang.
   let currentModelScale = loadModelScale();
   let locked = false;
+  let facing180 = loadFacing180();
 
-  // offset putaran manual (drag jari) - dilapis ATAS orientasi kad, jadi
-  // pelajar boleh pusing model dengan jari tanpa perlu gerak kad fizikal.
-  const rotationOffset = new THREE.Euler(0, 0, 0);
-  const scaleMatrix = new THREE.Matrix4();
-  const offsetMatrix = new THREE.Matrix4();
+  // offset putaran manual (drag jari) + pan (seret dua jari) - dilapis ATAS
+  // orientasi kad, jadi pelajar boleh laras model dengan jari tanpa perlu
+  // gerak kad fizikal.
+  const dragRotation = { yaw: 0, pitch: 0 };
+  const panOffset = new THREE.Vector3(0, 0, 0);
+  const scaleV = new THREE.Vector3();
 
   await Promise.all(items.map(async (item) => {
     const { group, hotspotMeshes } = await buildItemVisual(item);
@@ -365,25 +373,38 @@ export async function startARViewer(container, topicId, items, {
     saveModelScale(currentModelScale);
   }
 
-  function buildFinalMatrix(rotation, translation){
-    scaleMatrix.makeScale(currentModelScale, currentModelScale, currentModelScale);
-    offsetMatrix.makeRotationFromEuler(rotationOffset);
-    return buildPoseMatrix(rotation, translation, flipConfig)
-      .multiply(offsetMatrix)
-      .multiply(scaleMatrix);
+  function buildFinalMatrix(quat, pos){
+    const finalQuat = quat.clone().multiply(
+      new THREE.Quaternion().setFromEuler(new THREE.Euler(
+        dragRotation.pitch,
+        dragRotation.yaw + (facing180 ? Math.PI : 0),
+        0
+      ))
+    );
+    scaleV.set(currentModelScale, currentModelScale, currentModelScale);
+    return new THREE.Matrix4().compose(
+      new THREE.Vector3(pos.x + panOffset.x, pos.y + panOffset.y, pos.z + panOffset.z),
+      finalQuat,
+      scaleV
+    );
   }
 
-  const flipConfig = loadFlipConfig();
-  const debugPanel = buildDebugPanel(container, flipConfig, () => {}, currentModelScale, applyModelScale);
+  const debugPanel = buildDebugPanel(container, currentModelScale, applyModelScale, facing180, (v) => {
+    facing180 = v; saveFacing180(v);
+  });
   const lockBtn = buildLockButton(container, () => locked, (v) => { locked = v; });
 
-  // ============ isyarat sentuh: cubit=zoom, satu jari=putar/ketik ============
+  // ============ isyarat sentuh: 1 jari=putar/ketik, 2 jari=cubit(zoom)+seret(pan) ============
   let pinchStartDist = null;
   let pinchStartScale = currentModelScale;
+  let panStartMid = null;
   function touchDistance(touches){
     const dx = touches[0].clientX - touches[1].clientX;
     const dy = touches[0].clientY - touches[1].clientY;
     return Math.sqrt(dx*dx + dy*dy);
+  }
+  function touchMidpoint(touches){
+    return { x: (touches[0].clientX + touches[1].clientX) / 2, y: (touches[0].clientY + touches[1].clientY) / 2 };
   }
 
   const raycastHit = makeRaycastHandler(camera, () => allHotspotMeshes, (hit) => {
@@ -392,6 +413,7 @@ export async function startARViewer(container, topicId, items, {
 
   const DRAG_THRESHOLD = 10; // px - lebih kecil dari ni dikira "ketik", bukan "seret"
   const ROTATE_SENSITIVITY = 0.008;
+  const PAN_SENSITIVITY = 0.003;
   let drag = null; // {startX, startY, lastX, lastY, moved}
 
   function dragStart(x, y){ drag = { startX: x, startY: y, lastX: x, lastY: y, moved: false }; }
@@ -400,8 +422,8 @@ export async function startARViewer(container, topicId, items, {
     const dx = x - drag.lastX, dy = y - drag.lastY;
     if (!drag.moved && Math.hypot(x - drag.startX, y - drag.startY) > DRAG_THRESHOLD) drag.moved = true;
     if (drag.moved) {
-      rotationOffset.y += dx * ROTATE_SENSITIVITY;
-      rotationOffset.x += dy * ROTATE_SENSITIVITY;
+      dragRotation.yaw += dx * ROTATE_SENSITIVITY;
+      dragRotation.pitch += dy * ROTATE_SENSITIVITY;
       drag.lastX = x; drag.lastY = y;
     }
   }
@@ -420,13 +442,20 @@ export async function startARViewer(container, topicId, items, {
       ev.preventDefault();
       drag = null; // batalkan putaran satu-jari bila jari kedua turun
       const dist = touchDistance(ev.touches);
-      if (pinchStartDist == null) { pinchStartDist = dist; pinchStartScale = currentModelScale; return; }
+      const mid = touchMidpoint(ev.touches);
+      if (pinchStartDist == null) {
+        pinchStartDist = dist; pinchStartScale = currentModelScale; panStartMid = mid;
+        return;
+      }
       applyModelScale(pinchStartScale * (dist / pinchStartDist));
       debugPanel.refreshScaleLabel(currentModelScale);
+      panOffset.x += (mid.x - panStartMid.x) * PAN_SENSITIVITY;
+      panOffset.y -= (mid.y - panStartMid.y) * PAN_SENSITIVITY;
+      panStartMid = mid;
     }
   }, { passive: false });
   container.addEventListener("touchend", (ev) => {
-    if (ev.touches.length === 0) { dragEnd(); pinchStartDist = null; }
+    if (ev.touches.length === 0) { dragEnd(); pinchStartDist = null; panStartMid = null; }
   });
 
   // sokongan tetikus (untuk ujian di PC)
@@ -467,16 +496,23 @@ export async function startARViewer(container, topicId, items, {
       const pose = posit.pose(corners);
       if (!pose) return;
 
-      // kalau TAK locked, kemaskini pose beku ke pose langsung terkini.
-      // kalau locked, langkau kemaskini - guna pose lama yang tersimpan,
-      // supaya model kekal diam walaupun kad bergerak, sementara
-      // putaran jari & zoom tetap berfungsi di atasnya.
-      if (!locked) {
-        frozenPose[entry.item.item_id] = { rotation: pose.bestRotation, translation: pose.bestTranslation };
-      }
+      const { q: rawQ, p: rawP } = poseToQuatPos(pose.bestRotation, pose.bestTranslation);
 
-      const useP = frozenPose[entry.item.item_id] || { rotation: pose.bestRotation, translation: pose.bestTranslation };
-      entry.group.matrix.copy(buildFinalMatrix(useP.rotation, useP.translation));
+      if (!smoothedQuat[entry.item.item_id]) {
+        // bingkai pertama kad ini dikesan - guna terus (tiada apa nak smooth lagi)
+        smoothedQuat[entry.item.item_id] = rawQ.clone();
+        smoothedPos[entry.item.item_id] = rawP.clone();
+      } else if (!locked) {
+        // slerp/lerp ke arah pose baru - hilangkan gegaran bingkai-ke-bingkai
+        // tanpa perlu "locked" untuk nampak stabil.
+        smoothedQuat[entry.item.item_id].slerp(rawQ, SMOOTH_ALPHA);
+        smoothedPos[entry.item.item_id].lerp(rawP, SMOOTH_ALPHA);
+      }
+      // bila locked: langkau slerp/lerp di atas, guna nilai smoothed SEDIA ADA
+      // (kekal beku) - tapi found/lost & visibility di bawah tetap berjalan
+      // seperti biasa supaya Mod Kuiz tetap tahu kad mana sedang dilihat.
+
+      entry.group.matrix.copy(buildFinalMatrix(smoothedQuat[entry.item.item_id], smoothedPos[entry.item.item_id]));
       entry.group.visible = true;
       lostCounters[entry.item.item_id] = 0;
       if (!wasVisible[entry.item.item_id]) {
@@ -485,19 +521,19 @@ export async function startARViewer(container, topicId, items, {
       }
     });
 
-    // items yang tak dikesan bingkai ini - beri toleransi sebelum sorok
-    // (dilangkau sepenuhnya bila locked - model kekal walaupun kad hilang)
-    if (!locked) {
-      Object.values(groupsByMarkerId).forEach(({ group, item }) => {
-        if (seenIds.has(Number(item.target_index))) return;
-        lostCounters[item.item_id] += 1;
-        if (lostCounters[item.item_id] > LOST_GRACE_FRAMES && wasVisible[item.item_id]) {
-          group.visible = false;
-          wasVisible[item.item_id] = false;
-          onTargetLost && onTargetLost(item);
-        }
-      });
-    }
+    // items yang tak dikesan bingkai ini - beri toleransi sebelum sorok.
+    // INI SENTIASA berjalan (tak lagi dilangkau bila locked) - Mod Kuiz
+    // perlukan status found/lost yang benar-benar mengikut kamera langsung,
+    // walaupun paparan visual model itu sendiri sedang dibekukan.
+    Object.values(groupsByMarkerId).forEach(({ group, item }) => {
+      if (seenIds.has(Number(item.target_index))) return;
+      lostCounters[item.item_id] += 1;
+      if (lostCounters[item.item_id] > LOST_GRACE_FRAMES && wasVisible[item.item_id]) {
+        if (!locked) group.visible = false; // kalau locked, model kekal kelihatan walau kad hilang
+        wasVisible[item.item_id] = false;
+        onTargetLost && onTargetLost(item);
+      }
+    });
 
     renderer.render(scene, camera);
     requestAnimationFrame(frame);
