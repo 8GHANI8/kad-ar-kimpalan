@@ -169,14 +169,33 @@ registerModel("buildFilletJoint", (THREE) => {
 });
 
 // ============================================================================
-// Bila model .glb sebenar dah sedia, ganti mana-mana registerModel(...) di atas
-// dengan versi async guna GLTFLoader. Contoh (perlu import GLTFLoader dalam
-// app.js dahulu - lihat nota dalam README.md):
+// GUNA MODEL .GLB SEBENAR (dari scan Reality Scan / Blender / mana-mana)
+// Panggil fungsi ni untuk daftarkan satu model .glb sebenar - tak perlu
+// faham async/GLTFLoader, cuma isi 3 nilai. Contoh:
 //
-//   registerModel("buildSMAWMachine", async (THREE, GLTFLoader) => {
-//     const loader = new GLTFLoader();
-//     const gltf = await loader.loadAsync("assets/models/mesin-smaw.glb");
-//     gltf.scene.scale.set(0.4, 0.4, 0.4);
-//     return gltf.scene;
-//   });
+//   registerGLBModel("buildSMAWMachine", "assets/models/mesin-smaw.glb", 0.4);
+//
+// - Nama PERTAMA mesti SAMA PERSIS dengan model_ref item itu dalam Sheet "Items".
+// - Path KEDUA ialah lokasi fail .glb dalam repo (letak fail dalam folder
+//   shared/assets/models/, rujuk path bermula dari situ).
+// - Nombor KETIGA (scale) melaraskan saiz keseluruhan model - mula dengan 1,
+//   kecilkan (cth 0.05-0.5) kalau model nampak gergasi, besarkan kalau
+//   terlalu kecil berbanding model placeholder lain. Simpan, reload, lihat,
+//   ulang sehingga nampak elok berbanding kad AR (rujuk README.md Langkah 8).
+//
+// Untuk GANTI model placeholder sedia ada (contoh buildSMAWMachine), letak
+// baris registerGLBModel(...) SELEPAS baris registerModel("buildSMAWMachine"...)
+// yang asal - versi terakhir menang (overwrite versi sebelumnya secara automatik).
 // ============================================================================
+function registerGLBModel(name, path, scale){
+  registerModel(name, async (THREE) => {
+    const loader = new window.GLTFLoader();
+    const gltf = await loader.loadAsync(path);
+    const group = gltf.scene;
+    group.scale.setScalar(scale !== undefined ? scale : 1);
+    return group;
+  });
+}
+
+// Contoh (padam "//" di depan bila kamu betul-betul ada fail .glb untuk item ini):
+// registerGLBModel("buildSMAWMachine", "assets/models/mesin-smaw.glb", 0.4);

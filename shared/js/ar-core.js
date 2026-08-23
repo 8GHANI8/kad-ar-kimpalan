@@ -9,8 +9,10 @@
 // ============================================================================
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
-window.THREE = THREE; // models.js (script biasa) guna THREE global ini
+window.THREE = THREE;       // models.js (script biasa) guna THREE global ini
+window.GLTFLoader = GLTFLoader; // models.js guna ini untuk load fail .glb sebenar
 
 // Satu "unit" saiz penanda = 1 unit skala Three.js (bukan mm sebenar) -
 // ini elak keperluan ukur kad sebenar. MODEL_SCALE ialah default awal sahaja -
@@ -77,8 +79,8 @@ export function attachHotspots(group, hotspots){
   return meshes;
 }
 
-export function buildItemVisual(item){
-  const group = buildModelByRef(THREE, item.model_ref); // dari models.js (global)
+export async function buildItemVisual(item){
+  const group = await buildModelByRef(THREE, item.model_ref); // dari models.js (global)
   const hotspotMeshes = attachHotspots(group, item.hotspots || []);
   return { group, hotspotMeshes };
 }
@@ -114,31 +116,43 @@ export function start3DViewer(container, item, { onHotspotClick } = {}){
   const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.01, 100);
   addLights(scene);
 
-  const { group, hotspotMeshes } = buildItemVisual(item);
-  scene.add(group);
-
-  // auto-fit kamera ikut saiz & pusat SEBENAR model (bukan andaikan model
-  // sentiasa di (0,0,0) - model placeholder/glb kerap ada offset dalaman)
-  const box = new THREE.Box3().setFromObject(group);
-  const center = box.getCenter(new THREE.Vector3());
-  const size = box.getSize(new THREE.Vector3());
-  const radius = Math.max(size.length() * 0.5, 0.2);
-  camera.position.set(center.x, center.y + radius * 0.3, center.z + radius * 2.4);
-
   const controls = new OrbitControls(camera, renderer.domElement);
-  controls.target.copy(center);
   controls.enableDamping = true;
-  controls.minDistance = radius * 0.8;
-  controls.maxDistance = radius * 8;
-  controls.update();
 
   // penting: JANGAN auto-putar model semasa/sejurus selepas pengguna
   // sedang drag - kalau tidak, putaran automatik "melawan" input pengguna
   // setiap frame dan rasa macam langsung tak responsive.
   let userInteracting = false;
   let idleResumeAt = 0;
+  const clock = new THREE.Clock();
   controls.addEventListener("start", () => { userInteracting = true; });
   controls.addEventListener("end", () => { userInteracting = false; idleResumeAt = clock.getElapsedTime() + 1.2; });
+
+  // model dimuatkan secara ASYNC (perlu untuk fail .glb sebenar, yang ambil
+  // masa beberapa saat) - viewer & kawalan sedia terus, model muncul bila siap.
+  let group = null;
+  let hotspotMeshes = [];
+  let stopped = false;
+
+  (async () => {
+    const built = await buildItemVisual(item);
+    if (stopped) return; // pengguna dah tutup viewer sebelum model siap dimuat
+    group = built.group;
+    hotspotMeshes = built.hotspotMeshes;
+    scene.add(group);
+
+    // auto-fit kamera ikut saiz & pusat SEBENAR model (bukan andaikan model
+    // sentiasa di (0,0,0) - model placeholder/glb kerap ada offset dalaman)
+    const box = new THREE.Box3().setFromObject(group);
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const radius = Math.max(size.length() * 0.5, 0.2);
+    camera.position.set(center.x, center.y + radius * 0.3, center.z + radius * 2.4);
+    controls.target.copy(center);
+    controls.minDistance = radius * 0.8;
+    controls.maxDistance = radius * 8;
+    controls.update();
+  })();
 
   const onPointerDown = makeRaycastHandler(camera, () => hotspotMeshes, (hit) => {
     if (onHotspotClick) onHotspotClick(hit);
@@ -153,20 +167,22 @@ export function start3DViewer(container, item, { onHotspotClick } = {}){
   }
   window.addEventListener("resize", onResize);
 
-  const clock = new THREE.Clock();
   renderer.setAnimationLoop(() => {
     const t = clock.getElapsedTime();
     const dt = clock.getDelta();
-    if (group.userData.idleSpin && !userInteracting && t > idleResumeAt) {
-      group.rotation.y += group.userData.idleSpin * dt;
+    if (group) {
+      if (group.userData.idleSpin && !userInteracting && t > idleResumeAt) {
+        group.rotation.y += group.userData.idleSpin * dt;
+      }
+      if (group.userData.flicker) group.userData.flicker.intensity = 1.1 + Math.sin(t*30)*0.15 + (Math.random()-0.5)*0.2;
     }
-    if (group.userData.flicker) group.userData.flicker.intensity = 1.1 + Math.sin(t*30)*0.15 + (Math.random()-0.5)*0.2;
     controls.update();
     renderer.render(scene, camera);
   });
 
   return {
     stop(){
+      stopped = true;
       renderer.setAnimationLoop(null);
       window.removeEventListener("resize", onResize);
       renderer.domElement.removeEventListener("click", onPointerDown);
@@ -329,8 +345,8 @@ export async function startARViewer(container, topicId, items, {
   const scaleMatrix = new THREE.Matrix4();
   const offsetMatrix = new THREE.Matrix4();
 
-  items.forEach(item => {
-    const { group, hotspotMeshes } = buildItemVisual(item);
+  await Promise.all(items.map(async (item) => {
+    const { group, hotspotMeshes } = await buildItemVisual(item);
     group.matrixAutoUpdate = false;
     group.visible = false;
     scene.add(group);
@@ -338,7 +354,7 @@ export async function startARViewer(container, topicId, items, {
     lostCounters[item.item_id] = 0;
     wasVisible[item.item_id] = false;
     hotspotMeshes.forEach(h => allHotspotMeshes.push(h));
-  });
+  }));
 
   // BUG DIBAIKI: dahulu group.scale ditetapkan tapi diabaikan terus sebab
   // group.matrix ditulis semula PENUH setiap bingkai (matrixAutoUpdate=false)
