@@ -186,6 +186,135 @@ export function start3DViewer(container, item, { onHotspotClick } = {}){
   };
 }
 
+// ==================== ADMIN: alat letak hotspot (klik terus pada model) ====
+// Dipakai oleh admin/index.html sahaja - papar model dalam kotak kecil
+// terbenam (bukan skrin penuh), model STATIK (tiada idle-spin, supaya senang
+// nak klik tepat), papar penanda hotspot sedia ada (hijau) + satu penanda
+// "belum simpan" (kuning) bila admin klik permukaan model baru.
+export function startHotspotEditor(container, item, hotspots, { onSurfaceClick, onMarkerClick } = {}){
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(container.clientWidth, container.clientHeight);
+  container.innerHTML = "";
+  container.appendChild(renderer.domElement);
+  renderer.domElement.style.touchAction = "none";
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.01, 100);
+  addLights(scene);
+
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+
+  let group = null;
+  let stopped = false;
+
+  function clearMarkers(){
+    if (!group) return;
+    group.children.filter(c => c.userData.isHotspotMarker || c.userData.isPendingMarker)
+      .forEach(c => group.remove(c));
+  }
+
+  function renderHotspotMarkers(list){
+    if (!group) return;
+    clearMarkers();
+    list.forEach(hs => {
+      const marker = new THREE.Mesh(
+        new THREE.SphereGeometry(0.045, 16, 16),
+        new THREE.MeshBasicMaterial({ color: 0x3ecf8e })
+      );
+      marker.position.set(Number(hs.pos_x) || 0, Number(hs.pos_y) || 0, Number(hs.pos_z) || 0);
+      marker.userData.isHotspotMarker = true;
+      marker.userData.hotspot = hs;
+      group.add(marker);
+    });
+  }
+
+  (async () => {
+    group = await buildModelByRef(THREE, item.model_ref);
+    if (stopped) return;
+    scene.add(group);
+
+    const box = new THREE.Box3().setFromObject(group);
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const radius = Math.max(size.length() * 0.5, 0.2);
+    camera.position.set(center.x, center.y + radius * 0.3, center.z + radius * 2.4);
+    controls.target.copy(center);
+    controls.minDistance = radius * 0.5;
+    controls.maxDistance = radius * 10;
+    controls.update();
+
+    renderHotspotMarkers(hotspots);
+  })();
+
+  const raycaster = new THREE.Raycaster();
+  const pointer = new THREE.Vector2();
+  function onClick(ev){
+    if (!group) return;
+    const rect = renderer.domElement.getBoundingClientRect();
+    const x = ev.touches ? ev.touches[0].clientX : ev.clientX;
+    const y = ev.touches ? ev.touches[0].clientY : ev.clientY;
+    pointer.x = ((x - rect.left) / rect.width) * 2 - 1;
+    pointer.y = -((y - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(pointer, camera);
+    const hits = raycaster.intersectObject(group, true);
+    if (!hits.length) return;
+    const hit = hits[0];
+    if (hit.object.userData.isHotspotMarker) {
+      onMarkerClick && onMarkerClick(hit.object.userData.hotspot);
+    } else if (!hit.object.userData.isPendingMarker) {
+      // titik dalam ruang TEMPATAN model (local space) - inilah yang jadi
+      // pos_x/pos_y/pos_z dalam Sheet, konsisten dengan macam mana hotspot
+      // sedia ada diletak sebagai anak group (attachHotspots).
+      const localPoint = group.worldToLocal(hit.point.clone());
+      onSurfaceClick && onSurfaceClick(localPoint);
+    }
+  }
+  renderer.domElement.addEventListener("click", onClick);
+
+  function onResize(){
+    camera.aspect = container.clientWidth / container.clientHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(container.clientWidth, container.clientHeight);
+  }
+  window.addEventListener("resize", onResize);
+
+  renderer.setAnimationLoop(() => {
+    controls.update();
+    renderer.render(scene, camera);
+  });
+
+  return {
+    setPendingMarker(pos){
+      if (!group) return;
+      let marker = group.children.find(c => c.userData.isPendingMarker);
+      if (!marker) {
+        marker = new THREE.Mesh(
+          new THREE.SphereGeometry(0.055, 16, 16),
+          new THREE.MeshBasicMaterial({ color: 0xffcc00 })
+        );
+        marker.userData.isPendingMarker = true;
+        group.add(marker);
+      }
+      marker.position.copy(pos);
+    },
+    clearPendingMarker(){
+      if (!group) return;
+      const marker = group.children.find(c => c.userData.isPendingMarker);
+      if (marker) group.remove(marker);
+    },
+    refreshHotspots(list){ renderHotspotMarkers(list); },
+    stop(){
+      stopped = true;
+      renderer.setAnimationLoop(null);
+      window.removeEventListener("resize", onResize);
+      renderer.domElement.removeEventListener("click", onClick);
+      container.innerHTML = "";
+    }
+  };
+}
+
 // ==================== AR MODE (kamera + pengesanan ArUco) =================
 // Tukar pose dari js-aruco2/posit (konvensyen kamera: Z positif = masuk ke
 // dalam skrin) kepada Three.js (Z negatif = masuk ke dalam skrin). X & Y

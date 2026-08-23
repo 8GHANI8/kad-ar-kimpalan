@@ -31,6 +31,31 @@
     <div class="admin-tabs" id="admin-tabs"></div>
     <div id="msg" class="panel" style="display:none;"></div>
 
+    <div class="panel" id="hotspot-tool-panel" style="display:none;">
+      <h2>🎯 Alat Letak Hotspot (Klik Terus Pada Model)</h2>
+      <label for="hs-item-select">Pilih Item</label>
+      <select id="hs-item-select"></select>
+      <div id="hotspot-viewer" style="height:420px;background:#000;border:1px solid var(--line);border-radius:4px;position:relative;margin-top:4px;overflow:hidden;">
+        <p id="hs-viewer-placeholder" style="color:var(--text-dim);font-size:12px;padding:20px;margin:0;">Pilih item di atas untuk mula.</p>
+      </div>
+      <p style="font-size:11px;color:var(--text-dim);margin-top:10px;line-height:1.6;">
+        Seret untuk putar, cubit/scroll untuk zoom. <strong style="color:#f2f1ee;">Klik permukaan model</strong> untuk tambah hotspot baru (penanda <strong style="color:#ffcc00;">kuning</strong> = belum simpan). <strong style="color:#f2f1ee;">Klik penanda hijau</strong> sedia ada untuk edit/padam.
+      </p>
+
+      <div id="hs-inline-form" style="display:none;margin-top:16px;padding-top:16px;border-top:1px solid var(--line);">
+        <h2 id="hs-inline-title" style="margin-bottom:10px;">Hotspot Baru</h2>
+        <label for="hs-label">Label</label>
+        <input type="text" id="hs-label" placeholder="cth: Dial Arus">
+        <label for="hs-info">Maklumat</label>
+        <textarea id="hs-info" placeholder="Penerangan pendek bahagian ini"></textarea>
+        <div style="display:flex;gap:10px;">
+          <button type="button" class="btn" id="hs-save-btn">Simpan</button>
+          <button type="button" class="btn danger" id="hs-delete-btn" style="display:none;">Padam</button>
+          <button type="button" class="btn ghost" id="hs-cancel-btn">Batal</button>
+        </div>
+      </div>
+    </div>
+
     <div class="panel" id="table-panel">
       <h2 id="table-title">—</h2>
       <div class="admin-table-wrap">
@@ -103,7 +128,9 @@ const SHEET_CONFIGS = {
   ], readOnly:true }
 };
 
-let passcode = null;
+// window.passcode (bukan 'let' biasa) supaya skrip module (alat hotspot)
+// boleh baca nilai semasa - 'let' skrip klasik tak capai dari skrip module.
+window.passcode = null;
 let currentSheet = "Topics";
 let editingId = null;
 
@@ -114,7 +141,7 @@ document.getElementById("btn-unlock").addEventListener("click", () => {
     document.getElementById("lock-error").style.display = "block";
     return;
   }
-  passcode = val;
+  window.passcode = val;
   sessionStorage.setItem("adminPasscode", val);
   document.getElementById("lock-view").style.display = "none";
   document.getElementById("admin-view").style.display = "block";
@@ -123,7 +150,7 @@ document.getElementById("btn-unlock").addEventListener("click", () => {
 
 const savedPasscode = sessionStorage.getItem("adminPasscode");
 if (savedPasscode){
-  passcode = savedPasscode;
+  window.passcode = savedPasscode;
   document.getElementById("lock-view").style.display = "none";
   document.getElementById("admin-view").style.display = "block";
 }
@@ -133,6 +160,10 @@ function showMsg(text, isError){
   msg.style.display = "block";
   msg.innerHTML = `<p style="font-size:13px;color:${isError ? 'var(--bad)' : 'var(--good)'};margin:0;">${text}</p>`;
   setTimeout(() => { msg.style.display = "none"; }, 4000);
+}
+
+function currentSheetIsHotspots(){
+  return currentSheet === "Hotspots";
 }
 
 function renderTabs(){
@@ -194,7 +225,7 @@ document.getElementById("data-form").addEventListener("submit", async (ev) => {
   if (editingId) payload[primaryField] = editingId;
 
   try {
-    await Api.adminSave(passcode, currentSheet, payload);
+    await Api.adminSave(window.passcode, currentSheet, payload);
     showMsg("Disimpan.");
     editingId = null;
     renderForm();
@@ -209,6 +240,9 @@ document.getElementById("data-form").addEventListener("submit", async (ev) => {
 
 async function loadSheet(){
   const cfg = SHEET_CONFIGS[currentSheet];
+  document.getElementById("hotspot-tool-panel").style.display = (currentSheet === "Hotspots") ? "block" : "none";
+  if (currentSheet === "Hotspots" && window.initHotspotTool) window.initHotspotTool();
+
   document.getElementById("table-title").textContent = currentSheet;
   const head = document.getElementById("table-head");
   const body = document.getElementById("table-body");
@@ -263,7 +297,7 @@ async function loadSheet(){
         delBtn.addEventListener("click", async () => {
           if (!confirm(`Padam rekod "${rowId}"?`)) return;
           try {
-            await Api.adminDelete(passcode, currentSheet, rowId);
+            await Api.adminDelete(window.passcode, currentSheet, rowId);
             showMsg("Dipadam.");
             loadSheet();
           } catch (err) { showMsg(err.message, true); }
@@ -286,7 +320,7 @@ document.getElementById("btn-reset-scores").addEventListener("click", async () =
   const label = topic ? `topik "${topic}"` : "SEMUA topik";
   if (!confirm(`Reset skor untuk ${label}? Tindakan ini tidak boleh dibatalkan.`)) return;
   try {
-    await Api.resetScores(passcode, topic || undefined);
+    await Api.resetScores(window.passcode, topic || undefined);
     showMsg("Papan pendahulu direset.");
   } catch (err) { showMsg(err.message, true); }
 });
@@ -299,7 +333,135 @@ function boot(){
   renderTabs();
   loadSheet();
 }
-if (passcode) boot();
+if (window.passcode) boot();
+</script>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script src="../shared/js/models.js"></script>
+<script type="module">
+import { startHotspotEditor } from "../shared/js/ar-core.js";
+
+let hotspotEditor = null;
+let currentEditorItem = null;
+let pendingPos = null;       // {x,y,z} - titik klik belum disimpan
+let editingHotspotId = null; // bila edit hotspot sedia ada (bukan tambah baru)
+
+async function populateItemSelect(){
+  const select = document.getElementById("hs-item-select");
+  const prevValue = select.value;
+  select.innerHTML = `<option value="">— pilih item —</option>`;
+  try {
+    const items = await window.Api.adminList("Items");
+    items.forEach(it => {
+      const opt = document.createElement("option");
+      opt.value = it.item_id;
+      opt.textContent = `${it.title} (${it.item_id})`;
+      select.appendChild(opt);
+    });
+    if (prevValue) select.value = prevValue;
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function loadHotspotEditorForItem(itemId){
+  const items = await window.Api.adminList("Items");
+  const item = items.find(i => i.item_id === itemId);
+  if (!item) return;
+  currentEditorItem = item;
+  const allHotspots = await window.Api.adminList("Hotspots");
+  const hotspots = allHotspots.filter(h => h.item_id === itemId);
+
+  if (hotspotEditor) hotspotEditor.stop();
+  hideInlineForm();
+
+  hotspotEditor = startHotspotEditor(document.getElementById("hotspot-viewer"), item, hotspots, {
+    onSurfaceClick: (point) => {
+      pendingPos = point;
+      editingHotspotId = null;
+      hotspotEditor.setPendingMarker(point);
+      showInlineForm({ label: "", info_text: "" }, false);
+    },
+    onMarkerClick: (hotspot) => {
+      editingHotspotId = hotspot.hotspot_id;
+      pendingPos = { x: Number(hotspot.pos_x) || 0, y: Number(hotspot.pos_y) || 0, z: Number(hotspot.pos_z) || 0 };
+      showInlineForm(hotspot, true);
+    }
+  });
+}
+
+document.getElementById("hs-item-select").addEventListener("change", (ev) => {
+  const id = ev.target.value;
+  if (id) loadHotspotEditorForItem(id);
+});
+
+function showInlineForm(hs, isExisting){
+  document.getElementById("hs-inline-form").style.display = "block";
+  document.getElementById("hs-inline-title").textContent = isExisting ? `Edit: ${hs.label || hs.hotspot_id}` : "Hotspot Baru";
+  document.getElementById("hs-label").value = hs.label || "";
+  document.getElementById("hs-info").value = hs.info_text || "";
+  document.getElementById("hs-delete-btn").style.display = isExisting ? "inline-flex" : "none";
+}
+function hideInlineForm(){
+  document.getElementById("hs-inline-form").style.display = "none";
+  if (hotspotEditor) hotspotEditor.clearPendingMarker();
+  pendingPos = null;
+  editingHotspotId = null;
+}
+
+document.getElementById("hs-cancel-btn").addEventListener("click", hideInlineForm);
+
+async function refreshEditorMarkers(){
+  if (!hotspotEditor || !currentEditorItem) return;
+  const allHotspots = await window.Api.adminList("Hotspots");
+  hotspotEditor.refreshHotspots(allHotspots.filter(h => h.item_id === currentEditorItem.item_id));
+}
+
+document.getElementById("hs-save-btn").addEventListener("click", async () => {
+  if (!pendingPos || !currentEditorItem) return;
+  const payload = {
+    item_id: currentEditorItem.item_id,
+    label: document.getElementById("hs-label").value,
+    info_text: document.getElementById("hs-info").value,
+    pos_x: pendingPos.x, pos_y: pendingPos.y, pos_z: pendingPos.z
+  };
+  if (editingHotspotId) payload.hotspot_id = editingHotspotId;
+  try {
+    await window.Api.adminSave(window.passcode, "Hotspots", payload);
+    window.showMsg("Hotspot disimpan.");
+    hideInlineForm();
+    await refreshEditorMarkers();
+    if (window.currentSheetIsHotspots && window.currentSheetIsHotspots()) window.loadSheet();
+  } catch (err) {
+    window.showMsg(err.message, true);
+  }
+});
+
+document.getElementById("hs-delete-btn").addEventListener("click", async () => {
+  if (!editingHotspotId) return;
+  if (!confirm("Padam hotspot ini?")) return;
+  try {
+    await window.Api.adminDelete(window.passcode, "Hotspots", editingHotspotId);
+    window.showMsg("Dipadam.");
+    hideInlineForm();
+    await refreshEditorMarkers();
+    if (window.currentSheetIsHotspots && window.currentSheetIsHotspots()) window.loadSheet();
+  } catch (err) {
+    window.showMsg(err.message, true);
+  }
+});
+
+// dipanggil dari skrip klasik (loadSheet) setiap kali tab Hotspots dibuka
+window.initHotspotTool = function(){
+  populateItemSelect();
+};
 </script>
 </body>
 </html>

@@ -43,3 +43,9 @@ const Api = {
 function apiConfigured() {
   return API_URL && !API_URL.includes("PASTE_");
 }
+
+// Api ialah 'const', jadi ia TIDAK automatik jadi window.Api (tak macam
+// function declaration). Skrip module (cth: alat letak hotspot admin, yang
+// perlu Three.js) tak boleh capai 'const' skrip klasik terus - jadi kita
+// dedahkan secara eksplisit di sini supaya kedua-dua jenis skrip boleh guna.
+window.Api = Api;
