@@ -74,7 +74,19 @@ export function attachHotspots(group, hotspots){
 }
 
 export async function buildItemVisual(item){
-  const group = await buildModelByRef(THREE, item.model_ref); // dari models.js (global)
+  let group;
+  try {
+    group = await buildModelByRef(THREE, item.model_ref); // dari models.js (global)
+  } catch (err) {
+    // PENTING: sebelum ni, kalau .glb gagal dimuat (cth path salah), ralat
+    // ini terus 'pecahkan' seluruh proses secara senyap - skrin jadi kosong
+    // tanpa sebarang petunjuk kenapa. Sekarang, jatuh balik ke kotak
+    // generik (wireframe oren) supaya kamu tahu ADA masalah, dan mesej
+    // ralat sebenar tetap dicatat dalam console (F12 di PC, atau
+    // chrome://inspect dari PC bersambung ke telefon) untuk debug lanjut.
+    console.error(`Gagal muat model untuk model_ref "${item.model_ref}":`, err);
+    group = buildGeneric(THREE);
+  }
   const hotspotMeshes = attachHotspots(group, item.hotspots || []);
   return { group, hotspotMeshes };
 }
