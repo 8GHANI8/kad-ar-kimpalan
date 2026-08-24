@@ -169,15 +169,18 @@ registerModel("buildFilletJoint", (THREE) => {
 });
 
 // ============================================================================
-// GUNA MODEL .GLB SEBENAR (dari scan Reality Scan / Blender / mana-mana)
+// GUNA MODEL .GLB SEBENAR (dari scan Reality Scan / Kiri Engine / Blender)
 // Panggil fungsi ni untuk daftarkan satu model .glb sebenar - tak perlu
 // faham async/GLTFLoader, cuma isi 3 nilai. Contoh:
 //
 //   registerGLBModel("buildSMAWMachine", "assets/models/mesin-smaw.glb", 0.4);
 //
 // - Nama PERTAMA mesti SAMA PERSIS dengan model_ref item itu dalam Sheet "Items".
-// - Path KEDUA ialah lokasi fail .glb dalam repo (letak fail dalam folder
-//   shared/assets/models/, rujuk path bermula dari situ).
+// - Path KEDUA SENTIASA relatif kepada folder shared/ (bukan kepada halaman
+//   yang dibuka, dan bukan kepada models.js sendiri) - jadi letak fail .glb
+//   dalam shared/assets/models/, dan cuma tulis
+//   "assets/models/nama-fail.glb" (TANPA "../", tanpa "shared/" di depan).
+//   Ini SENTIASA betul tak kira sama ada dibuka dari student/ atau admin/.
 // - Nombor KETIGA (scale) melaraskan saiz keseluruhan model - mula dengan 1,
 //   kecilkan (cth 0.05-0.5) kalau model nampak gergasi, besarkan kalau
 //   terlalu kecil berbanding model placeholder lain. Simpan, reload, lihat,
@@ -196,7 +199,12 @@ registerModel("buildFilletJoint", (THREE) => {
 function registerGLBModel(name, path, scale){
   registerModel(name, async (THREE) => {
     const loader = new window.GLTFLoader();
-    const gltf = await loader.loadAsync(path);
+    // path sentiasa diselesaikan berbanding folder shared/ (lihat
+    // window.SHARED_BASE_URL dalam ar-core.js) - bukan berbanding halaman
+    // semasa - supaya "assets/models/fail.glb" SENTIASA betul, tak kira
+    // dibuka dari student/ atau admin/.
+    const resolvedUrl = window.SHARED_BASE_URL ? new URL(path, window.SHARED_BASE_URL).href : path;
+    const gltf = await loader.loadAsync(resolvedUrl);
     const group = gltf.scene;
     group.scale.setScalar(scale !== undefined ? scale : 1);
 
@@ -213,4 +221,6 @@ function registerGLBModel(name, path, scale){
 }
 
 // Contoh (padam "//" di depan bila kamu betul-betul ada fail .glb untuk item ini):
-registerGLBModel("buildSMAWMachine", "..shared/assets/models/pemegang-elektrod.glb", 0.4);
+// registerGLBModel("buildSMAWMachine", "assets/models/mesin-smaw.glb", 0.4);
+registerGLBModel("buildSMAWMachine", "assets/models/pemegang-elektrod.glb", 0.4);
+

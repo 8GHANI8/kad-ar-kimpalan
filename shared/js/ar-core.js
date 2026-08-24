@@ -14,6 +14,13 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 window.THREE = THREE;       // models.js (script biasa) guna THREE global ini
 window.GLTFLoader = GLTFLoader; // models.js guna ini untuk load fail .glb sebenar
 
+// Asas laluan TETAP untuk fail .glb, dikira dari lokasi ar-core.js sendiri
+// (import.meta.url) - bukan dari halaman yang membukanya. Ini bermakna path
+// dalam registerGLBModel(...) SENTIASA relatif kepada folder shared/, tak
+// kira sama ada dibuka dari student/ atau admin/ - elak keliru "../shared/"
+// yang senang tersalah/tertinggal (isu yang berlaku sebelum ini).
+window.SHARED_BASE_URL = new URL("../", import.meta.url).href;
+
 // Satu "unit" saiz penanda = 1 unit skala Three.js (bukan mm sebenar) -
 // ini elak keperluan ukur kad sebenar. MODEL_SCALE ialah default awal sahaja -
 // boleh dilaraskan LIVE guna slider dalam panel "Debug AR" (cubit skrin pun
