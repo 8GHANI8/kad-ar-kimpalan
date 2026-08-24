@@ -183,6 +183,12 @@ registerModel("buildFilletJoint", (THREE) => {
 //   terlalu kecil berbanding model placeholder lain. Simpan, reload, lihat,
 //   ulang sehingga nampak elok berbanding kad AR (rujuk README.md Langkah 8).
 //
+// ANIMASI: kalau fail .glb ada animasi dibuat/di-bake dalam Blender (Action
+// pada objek, export dengan "Include > Animation" dihidupkan semasa eksport
+// .glb dari Blender), SEMUA animasi dalam fail akan dimainkan secara automatik
+// & berulang (loop) - tak perlu buat apa-apa lagi, cuma pastikan animasi
+// tersimpan dalam fail .glb itu sendiri.
+//
 // Untuk GANTI model placeholder sedia ada (contoh buildSMAWMachine), letak
 // baris registerGLBModel(...) SELEPAS baris registerModel("buildSMAWMachine"...)
 // yang asal - versi terakhir menang (overwrite versi sebelumnya secara automatik).
@@ -193,6 +199,15 @@ function registerGLBModel(name, path, scale){
     const gltf = await loader.loadAsync(path);
     const group = gltf.scene;
     group.scale.setScalar(scale !== undefined ? scale : 1);
+
+    if (gltf.animations && gltf.animations.length){
+      const mixer = new THREE.AnimationMixer(group);
+      gltf.animations.forEach(clip => mixer.clipAction(clip).play());
+      // disimpan dalam userData supaya viewer (ar-core.js) boleh panggil
+      // mixer.update(dt) setiap bingkai - tanpa ini animasi tersimpan
+      // dalam fail tapi TAK akan bergerak dalam app.
+      group.userData.mixer = mixer;
+    }
     return group;
   });
 }

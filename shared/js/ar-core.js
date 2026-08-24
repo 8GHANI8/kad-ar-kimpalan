@@ -169,6 +169,7 @@ export function start3DViewer(container, item, { onHotspotClick } = {}){
         group.rotation.y += group.userData.idleSpin * dt;
       }
       if (group.userData.flicker) group.userData.flicker.intensity = 1.1 + Math.sin(t*30)*0.15 + (Math.random()-0.5)*0.2;
+      if (group.userData.mixer) group.userData.mixer.update(dt); // animasi .glb dari Blender (kalau ada)
     }
     controls.update();
     renderer.render(scene, camera);
@@ -280,7 +281,9 @@ export function startHotspotEditor(container, item, hotspots, { onSurfaceClick, 
   }
   window.addEventListener("resize", onResize);
 
+  const hsEditorClock = new THREE.Clock();
   renderer.setAnimationLoop(() => {
+    if (group && group.userData.mixer) group.userData.mixer.update(hsEditorClock.getDelta());
     controls.update();
     renderer.render(scene, camera);
   });
@@ -605,9 +608,11 @@ export async function startARViewer(container, topicId, items, {
   }
   window.addEventListener("resize", onResize);
 
+  const animClock = new THREE.Clock();
   let running = true;
   function frame(){
     if (!running) return;
+    const dt = animClock.getDelta();
     dctx.drawImage(video, 0, 0, dw, dh);
     const imageData = dctx.getImageData(0, 0, dw, dh);
     const markers = detector.detect(imageData);
@@ -662,6 +667,13 @@ export async function startARViewer(container, topicId, items, {
         wasVisible[item.item_id] = false;
         onTargetLost && onTargetLost(item);
       }
+    });
+
+    // animasi .glb dari Blender (kalau ada) - dikemaskini utk SEMUA item,
+    // bukan cuma yang sedang dilihat, supaya tak "tersentak" bila kad
+    // hilang-jumpa semula.
+    Object.values(groupsByMarkerId).forEach(({ group }) => {
+      if (group.userData.mixer) group.userData.mixer.update(dt);
     });
 
     renderer.render(scene, camera);
