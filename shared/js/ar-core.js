@@ -58,18 +58,23 @@ export function addLights(scene){
   scene.add(rim);
 }
 
-export function attachHotspots(group, hotspots){
+// hotspot marker bersaiz BERKADAR dengan saiz model (modelRadius) - dahulu
+// saiz tetap (0.045 unit) tak kira besar/kecil model, jadi nampak gergasi
+// pada model kecil (cth pemegang elektrod) dan mikroskopik pada model besar.
+export function attachHotspots(group, hotspots, modelRadius){
+  const r = modelRadius || 0.3;
+  const markerRadius = Math.max(r * 0.05, 0.008);
   const meshes = [];
   hotspots.forEach((hs, i) => {
     let x = Number(hs.pos_x) || 0, y = Number(hs.pos_y) || 0, z = Number(hs.pos_z) || 0;
     if (x === 0 && y === 0 && z === 0) {
       const angle = (i / Math.max(hotspots.length, 1)) * Math.PI * 2;
-      x = Math.cos(angle) * 0.25;
-      y = 0.1 + (i % 2) * 0.1;
-      z = Math.sin(angle) * 0.25;
+      x = Math.cos(angle) * r * 0.5;
+      y = r * 0.2 + (i % 2) * r * 0.2;
+      z = Math.sin(angle) * r * 0.5;
     }
     const marker = new THREE.Mesh(
-      new THREE.SphereGeometry(0.05, 16, 16),
+      new THREE.SphereGeometry(markerRadius, 16, 16),
       new THREE.MeshBasicMaterial({ color: 0xff7a1a })
     );
     marker.position.set(x, y, z);
@@ -80,7 +85,18 @@ export function attachHotspots(group, hotspots){
   return meshes;
 }
 
-export async function buildItemVisual(item){
+function getBoundingRadius(group){
+  const box = new THREE.Box3().setFromObject(group);
+  const size = box.getSize(new THREE.Vector3());
+  return Math.max(size.length() * 0.5, 0.05);
+}
+
+// Bina model (placeholder ATAU .glb) dan terapkan skala tambahan dari Sheet
+// "Items" (lajur model_scale, boleh dilaraskan admin guna slider dalam Alat
+// Letak Hotspot - tak perlu edit kod untuk ubah saiz lagi). baseScale
+// dipulangkan berasingan supaya slider admin boleh kira semula tanpa
+// bertindih dengan skala kod asal (dari registerGLBModel).
+async function buildScaledGroup(item){
   let group;
   try {
     group = await buildModelByRef(THREE, item.model_ref); // dari models.js (global)
@@ -94,9 +110,19 @@ export async function buildItemVisual(item){
     console.error(`Gagal muat model untuk model_ref "${item.model_ref}":`, err);
     group = buildGeneric(THREE);
   }
-  const hotspotMeshes = attachHotspots(group, item.hotspots || []);
+  const baseScale = group.scale.x || 1;
+  const itemScale = Number(item.model_scale);
+  if (!isNaN(itemScale) && itemScale > 0) group.scale.setScalar(baseScale * itemScale);
+  return { group, baseScale };
+}
+
+export async function buildItemVisual(item){
+  const { group } = await buildScaledGroup(item);
+  const modelRadius = getBoundingRadius(group);
+  const hotspotMeshes = attachHotspots(group, item.hotspots || [], modelRadius);
   return { group, hotspotMeshes };
 }
+
 
 function makeRaycastHandler(camera, getMeshMap, onHit){
   const raycaster = new THREE.Raycaster();
@@ -227,6 +253,8 @@ export function startHotspotEditor(container, item, hotspots, { onSurfaceClick, 
   controls.enableDamping = true;
 
   let group = null;
+  let baseScale = 1;
+  let modelRadius = 0.3;
   let stopped = false;
 
   function clearMarkers(){
@@ -238,9 +266,10 @@ export function startHotspotEditor(container, item, hotspots, { onSurfaceClick, 
   function renderHotspotMarkers(list){
     if (!group) return;
     clearMarkers();
+    const markerRadius = Math.max(modelRadius * 0.05, 0.008);
     list.forEach(hs => {
       const marker = new THREE.Mesh(
-        new THREE.SphereGeometry(0.045, 16, 16),
+        new THREE.SphereGeometry(markerRadius, 16, 16),
         new THREE.MeshBasicMaterial({ color: 0x3ecf8e })
       );
       marker.position.set(Number(hs.pos_x) || 0, Number(hs.pos_y) || 0, Number(hs.pos_z) || 0);
@@ -250,21 +279,25 @@ export function startHotspotEditor(container, item, hotspots, { onSurfaceClick, 
     });
   }
 
-  (async () => {
-    group = await buildModelByRef(THREE, item.model_ref);
-    if (stopped) return;
-    scene.add(group);
-
+  function fitCameraToModel(){
     const box = new THREE.Box3().setFromObject(group);
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
-    const radius = Math.max(size.length() * 0.5, 0.2);
-    camera.position.set(center.x, center.y + radius * 0.3, center.z + radius * 2.4);
+    modelRadius = Math.max(size.length() * 0.5, 0.05);
+    camera.position.set(center.x, center.y + modelRadius * 0.3, center.z + modelRadius * 2.4);
     controls.target.copy(center);
-    controls.minDistance = radius * 0.5;
-    controls.maxDistance = radius * 10;
+    controls.minDistance = modelRadius * 0.5;
+    controls.maxDistance = modelRadius * 10;
     controls.update();
+  }
 
+  (async () => {
+    const built = await buildScaledGroup(item);
+    if (stopped) return;
+    group = built.group;
+    baseScale = built.baseScale;
+    scene.add(group);
+    fitCameraToModel();
     renderHotspotMarkers(hotspots);
   })();
 
@@ -312,8 +345,9 @@ export function startHotspotEditor(container, item, hotspots, { onSurfaceClick, 
       if (!group) return;
       let marker = group.children.find(c => c.userData.isPendingMarker);
       if (!marker) {
+        const markerRadius = Math.max(modelRadius * 0.06, 0.01);
         marker = new THREE.Mesh(
-          new THREE.SphereGeometry(0.055, 16, 16),
+          new THREE.SphereGeometry(markerRadius, 16, 16),
           new THREE.MeshBasicMaterial({ color: 0xffcc00 })
         );
         marker.userData.isPendingMarker = true;
@@ -327,6 +361,15 @@ export function startHotspotEditor(container, item, hotspots, { onSurfaceClick, 
       if (marker) group.remove(marker);
     },
     refreshHotspots(list){ renderHotspotMarkers(list); },
+    // dipanggil oleh slider "Skala Model" dalam admin - laras saiz model
+    // SECARA LANGSUNG dalam pratonton (tak simpan - admin perlu tekan
+    // Simpan Skala secara berasingan untuk tulis ke Sheet).
+    setScaleMultiplier(mult){
+      if (!group || isNaN(mult) || mult <= 0) return;
+      group.scale.setScalar(baseScale * mult);
+      fitCameraToModel();
+      renderHotspotMarkers(hotspots); // saiz penanda perlu kira semula ikut saiz baru
+    },
     stop(){
       stopped = true;
       renderer.setAnimationLoop(null);

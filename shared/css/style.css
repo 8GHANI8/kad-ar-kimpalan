@@ -78,6 +78,10 @@ footer.note{margin-top:40px;padding-top:16px;border-top:1px solid var(--line);fo
 body.viewer{overflow:hidden;height:100vh;height:100dvh;}
 .viewer-wrap{position:relative;width:100vw;height:100vh;height:100dvh;background:#000;}
 #stage,#ar-container{position:absolute;inset:0;}
+/* latar Mod 3D sahaja - kosmetik semata, AR tak disentuh (video kamera
+   tetap menutup #ar-container serta-merta, latar hitam asal tak nampak
+   pun dalam kegunaan biasa). Tukar warna di sini kalau nak tona lain. */
+#stage{background:radial-gradient(circle at 50% 35%, #232328 0%, #131316 75%);}
 .hud-top{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:14px 16px;z-index:5;background:linear-gradient(to bottom, rgba(0,0,0,.75), transparent);}
 .hud-top .title{font-family:var(--display);text-transform:uppercase;font-size:15px;letter-spacing:.04em;}
 .hud-top .back{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);text-decoration:none;border:1px solid var(--line);padding:7px 12px;border-radius:20px;}
