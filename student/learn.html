@@ -38,6 +38,8 @@
     <button id="btn-ar">AR</button>
   </div>
 
+  <button class="info-toggle-btn" id="btn-info">ℹ Keterangan</button>
+
   <div class="item-picker" id="item-picker"></div>
 
   <div class="hud-status" id="hud-status"><span class="dot"></span><span id="hud-status-text">Sedia</span></div>
@@ -47,6 +49,14 @@
     <p class="hs-label">Bahagian</p>
     <h4 id="hs-title">—</h4>
     <p id="hs-info">—</p>
+  </div>
+
+  <div class="hotspot-panel item-info-panel" id="item-info-panel">
+    <span class="close" id="item-info-close">✕</span>
+    <p class="hs-label">Keterangan Item</p>
+    <h4 id="info-title">—</h4>
+    <p id="info-summary">—</p>
+    <ul id="info-specs"></ul>
   </div>
 
   <div class="instruction-toast" id="toast-ar" style="display:none;">
@@ -74,20 +84,63 @@ const hsTitle = document.getElementById("hs-title");
 const hsInfo = document.getElementById("hs-info");
 const toastAr = document.getElementById("toast-ar");
 const toastArText = document.getElementById("toast-ar-text");
+const btnInfo = document.getElementById("btn-info");
+const infoPanel = document.getElementById("item-info-panel");
+const infoTitle = document.getElementById("info-title");
+const infoSummary = document.getElementById("info-summary");
+const infoSpecsList = document.getElementById("info-specs");
 
 document.getElementById("hotspot-close").addEventListener("click", () => hotspotPanel.classList.remove("show"));
+document.getElementById("item-info-close").addEventListener("click", () => {
+  infoPanel.classList.remove("show");
+  btnInfo.classList.remove("active");
+});
 
 let bundle = null;
 let currentMode = "3d";
 let currentItemIndex = 0;
 let threeSession = null;
 let arSession = null;
+let arCurrentItem = null; // item terkini dikesan dalam Mod AR (utk butang Keterangan)
 
 function showHotspot(hit){
   hsTitle.textContent = hit.label;
   hsInfo.textContent = hit.info;
   hotspotPanel.classList.add("show");
 }
+
+function currentDisplayedItem(){
+  if (currentMode === "3d") return bundle.items[currentItemIndex];
+  return arCurrentItem;
+}
+
+function renderItemInfo(item){
+  infoTitle.textContent = item.title;
+  infoSummary.textContent = item.summary || "";
+  infoSpecsList.innerHTML = "";
+  (item.specs || []).forEach(s => {
+    if (!s) return;
+    const li = document.createElement("li");
+    li.textContent = s;
+    infoSpecsList.appendChild(li);
+  });
+}
+
+btnInfo.addEventListener("click", () => {
+  const item = currentDisplayedItem();
+  if (!item) {
+    // Mod AR, belum ada kad dikesan lagi
+    infoTitle.textContent = "Belum ada item";
+    infoSummary.textContent = "Halakan kamera ke kad dahulu untuk lihat keterangan item itu.";
+    infoSpecsList.innerHTML = "";
+    infoPanel.classList.add("show");
+    btnInfo.classList.add("active");
+    return;
+  }
+  renderItemInfo(item);
+  infoPanel.classList.toggle("show");
+  btnInfo.classList.toggle("active", infoPanel.classList.contains("show"));
+});
 
 function renderItemPicker(){
   itemPicker.innerHTML = "";
@@ -98,15 +151,19 @@ function renderItemPicker(){
     b.addEventListener("click", () => {
       currentItemIndex = i;
       renderItemPicker();
-      if (currentMode === "3d") load3D();
+      if (currentMode === "3d") load3D(true);
     });
     itemPicker.appendChild(b);
   });
   itemPicker.style.display = currentMode === "3d" ? "flex" : "none";
 }
 
-function load3D(){
+function load3D(preserveInfoPanel){
   hotspotPanel.classList.remove("show");
+  if (!preserveInfoPanel) {
+    infoPanel.classList.remove("show");
+    btnInfo.classList.remove("active");
+  }
   if (threeSession) threeSession.stop();
   const item = bundle.items[currentItemIndex];
   hudTitle.textContent = item.title;
@@ -114,13 +171,23 @@ function load3D(){
   threeSession = start3DViewer(document.getElementById("stage"), item, {
     onHotspotClick: showHotspot
   });
+  if (preserveInfoPanel && infoPanel.classList.contains("show")) renderItemInfo(item);
 }
 
 async function loadAR(){
   hotspotPanel.classList.remove("show");
+  infoPanel.classList.remove("show");
+  btnInfo.classList.remove("active");
+  arCurrentItem = null;
   hudStatusText.textContent = "Memulakan kamera…";
   arSession = await startARViewer(document.getElementById("ar-container"), topicId, bundle.items, {
-    onTargetFound: (item) => { hudTitle.textContent = item.title; hudStatusText.textContent = "Kad dikesan ✓"; },
+    onTargetFound: (item) => {
+      hudTitle.textContent = item.title;
+      hudStatusText.textContent = "Kad dikesan ✓";
+      arCurrentItem = item;
+      // kalau panel keterangan sedang terbuka, kemaskini terus ikut kad baru
+      if (infoPanel.classList.contains("show")) renderItemInfo(item);
+    },
     onTargetLost: () => { hudStatusText.textContent = "Cari kad…"; },
     onHotspotClick: showHotspot,
     onError: (err) => {
