@@ -103,7 +103,17 @@ let threeSession = null;
 let arSession = null;
 let arCurrentItem = null; // item terkini dikesan dalam Mod AR (utk butang Keterangan)
 
+// Skrin sempit (telefon): dua panel bertindih kalau kedua-dua terbuka
+// serentak (masing-masing sehingga 300px lebar, tak muat side-by-side pada
+// skrin ~400px). Skrin lebar (PC/tablet): kekal boleh buka SERENTAK macam
+// sebelum ini, sebab memang cukup ruang. 700px dipilih sebagai anggaran
+// munasabah "telefon vs bukan-telefon".
+function isNarrowScreen(){
+  return window.innerWidth < 700;
+}
+
 function showHotspot(hit){
+  if (isNarrowScreen()) { infoPanel.classList.remove("show"); btnInfo.classList.remove("active"); }
   hsTitle.textContent = hit.label;
   hsInfo.textContent = hit.info;
   hotspotPanel.classList.add("show");
@@ -128,6 +138,7 @@ function renderItemInfo(item){
 
 btnInfo.addEventListener("click", () => {
   const item = currentDisplayedItem();
+  if (isNarrowScreen()) hotspotPanel.classList.remove("show");
   if (!item) {
     // Mod AR, belum ada kad dikesan lagi
     infoTitle.textContent = "Belum ada item";

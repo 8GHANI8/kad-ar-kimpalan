@@ -61,9 +61,10 @@ export function addLights(scene){
 // hotspot marker bersaiz BERKADAR dengan saiz model (modelRadius) - dahulu
 // saiz tetap (0.045 unit) tak kira besar/kecil model, jadi nampak gergasi
 // pada model kecil (cth pemegang elektrod) dan mikroskopik pada model besar.
-export function attachHotspots(group, hotspots, modelRadius){
+export function attachHotspots(group, hotspots, modelRadius, hotspotScaleMult){
   const r = modelRadius || 0.3;
-  const markerRadius = Math.max(r * 0.05, 0.008);
+  const hsMult = hotspotScaleMult || 1;
+  const markerRadius = Math.max(r * 0.05 * hsMult, 0.008);
   const meshes = [];
   hotspots.forEach((hs, i) => {
     let x = Number(hs.pos_x) || 0, y = Number(hs.pos_y) || 0, z = Number(hs.pos_z) || 0;
@@ -119,7 +120,8 @@ async function buildScaledGroup(item){
 export async function buildItemVisual(item){
   const { group } = await buildScaledGroup(item);
   const modelRadius = getBoundingRadius(group);
-  const hotspotMeshes = attachHotspots(group, item.hotspots || [], modelRadius);
+  const hotspotScaleMult = Number(item.hotspot_scale) || 1;
+  const hotspotMeshes = attachHotspots(group, item.hotspots || [], modelRadius, hotspotScaleMult);
   return { group, hotspotMeshes };
 }
 
@@ -255,6 +257,7 @@ export function startHotspotEditor(container, item, hotspots, { onSurfaceClick, 
   let group = null;
   let baseScale = 1;
   let modelRadius = 0.3;
+  let hotspotScaleMult = 1;
   let stopped = false;
 
   function clearMarkers(){
@@ -266,7 +269,7 @@ export function startHotspotEditor(container, item, hotspots, { onSurfaceClick, 
   function renderHotspotMarkers(list){
     if (!group) return;
     clearMarkers();
-    const markerRadius = Math.max(modelRadius * 0.05, 0.008);
+    const markerRadius = Math.max(modelRadius * 0.05 * hotspotScaleMult, 0.008);
     list.forEach(hs => {
       const marker = new THREE.Mesh(
         new THREE.SphereGeometry(markerRadius, 16, 16),
@@ -296,6 +299,8 @@ export function startHotspotEditor(container, item, hotspots, { onSurfaceClick, 
     if (stopped) return;
     group = built.group;
     baseScale = built.baseScale;
+    const savedHotspotScale = Number(item.hotspot_scale);
+    if (!isNaN(savedHotspotScale) && savedHotspotScale > 0) hotspotScaleMult = savedHotspotScale;
     scene.add(group);
     fitCameraToModel();
     renderHotspotMarkers(hotspots);
@@ -345,7 +350,7 @@ export function startHotspotEditor(container, item, hotspots, { onSurfaceClick, 
       if (!group) return;
       let marker = group.children.find(c => c.userData.isPendingMarker);
       if (!marker) {
-        const markerRadius = Math.max(modelRadius * 0.06, 0.01);
+        const markerRadius = Math.max(modelRadius * 0.06 * hotspotScaleMult, 0.01);
         marker = new THREE.Mesh(
           new THREE.SphereGeometry(markerRadius, 16, 16),
           new THREE.MeshBasicMaterial({ color: 0xffcc00 })
@@ -364,11 +369,33 @@ export function startHotspotEditor(container, item, hotspots, { onSurfaceClick, 
     // dipanggil oleh slider "Skala Model" dalam admin - laras saiz model
     // SECARA LANGSUNG dalam pratonton (tak simpan - admin perlu tekan
     // Simpan Skala secara berasingan untuk tulis ke Sheet).
+    //
+    // BUG DIBAIKI: dahulu fungsi ini panggil fitCameraToModel() setiap kali
+    // slider gerak - itu reposisi KAMERA mengikut nisbah TETAP kepada saiz
+    // model (jarak = radius x 2.4 SENTIASA), jadi saiz model di SKRIN
+    // kekal sama walau apa pun nilai slider (kamera diam-diam "menipu"
+    // untuk sentiasa muatkan model penuh skrin). Sekarang kamera KEKAL
+    // DIAM bila slider gerak - hanya had zoom (min/maxDistance) dikemas
+    // kini supaya munasabah, TANPA alihkan kedudukan kamera sebenar. Ini
+    // fitCameraToModel() penuh kekal untuk MUAT AWAL sahaja (sekali,
+    // sebelum admin mula berinteraksi).
     setScaleMultiplier(mult){
       if (!group || isNaN(mult) || mult <= 0) return;
       group.scale.setScalar(baseScale * mult);
-      fitCameraToModel();
+      const box = new THREE.Box3().setFromObject(group);
+      const size = box.getSize(new THREE.Vector3());
+      modelRadius = Math.max(size.length() * 0.5, 0.05);
+      controls.minDistance = modelRadius * 0.3;
+      controls.maxDistance = modelRadius * 15;
       renderHotspotMarkers(hotspots); // saiz penanda perlu kira semula ikut saiz baru
+    },
+    // slider "Saiz Hotspot" - kawalan BERASINGAN daripada skala model.
+    // Skala model = besar/kecil OBJEK. Saiz hotspot = besar/kecil TITIK
+    // PENANDA sahaja, tak jejas model.
+    setHotspotScaleMultiplier(mult){
+      if (isNaN(mult) || mult <= 0) return;
+      hotspotScaleMult = mult;
+      renderHotspotMarkers(hotspots);
     },
     stop(){
       stopped = true;

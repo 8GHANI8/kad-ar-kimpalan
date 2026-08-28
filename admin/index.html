@@ -37,12 +37,14 @@
       <select id="hs-item-select"></select>
 
       <div id="hs-scale-row" style="display:none;margin-top:14px;">
-        <label for="hs-scale-slider">Skala Model — <span id="hs-scale-value">1.0x</span></label>
-        <div style="display:flex;align-items:center;gap:10px;">
-          <input type="range" id="hs-scale-slider" min="0.1" max="5" step="0.1" value="1" style="flex:1;">
-          <button type="button" class="btn ghost" id="hs-scale-save-btn" style="white-space:nowrap;">Simpan Skala</button>
-        </div>
-        <p style="font-size:10.5px;color:var(--text-dim);margin:4px 0 0;">Laras terus dalam pratonton di bawah — tekan "Simpan Skala" untuk tulis nilai ke Sheet (kalau tidak, ia reset bila kamu tinggalkan halaman).</p>
+        <label for="hs-scale-slider">Skala Model (saiz OBJEK) — <span id="hs-scale-value">1.0x</span></label>
+        <input type="range" id="hs-scale-slider" min="0.1" max="5" step="0.1" value="1" style="width:100%;">
+
+        <label for="hs-hotspot-scale-slider" style="margin-top:14px;">Saiz Hotspot (saiz TITIK PENANDA sahaja) — <span id="hs-hotspot-scale-value">1.0x</span></label>
+        <input type="range" id="hs-hotspot-scale-slider" min="0.3" max="4" step="0.1" value="1" style="width:100%;">
+
+        <button type="button" class="btn ghost block" id="hs-scale-save-btn" style="margin-top:10px;">Simpan Skala Model + Saiz Hotspot</button>
+        <p style="font-size:10.5px;color:var(--text-dim);margin:4px 0 0;">Kedua-dua laras terus dalam pratonton di bawah — tekan butang di atas untuk tulis KEDUA-DUA nilai ke Sheet sekali gus (kalau tidak, ia reset bila kamu tinggalkan halaman).</p>
       </div>
 
       <div id="hotspot-viewer" style="height:420px;background:#000;border:1px solid var(--line);border-radius:4px;position:relative;margin-top:14px;overflow:hidden;">
@@ -111,7 +113,8 @@ const SHEET_CONFIGS = {
     { key:"model_ref", label:"Model Ref (nama fungsi dalam models.js)", type:"text" },
     { key:"summary", label:"Ringkasan", type:"textarea" },
     { key:"specs", label:"Spesifikasi (pisah guna tanda | )", type:"textarea" },
-    { key:"model_scale", label:"Skala Model (kosong = guna default kod)", type:"number" }
+    { key:"model_scale", label:"Skala Model (kosong = guna default kod)", type:"number" },
+    { key:"hotspot_scale", label:"Saiz Hotspot (kosong = default 1x)", type:"number" }
   ]},
   Hotspots: { fields: [
     { key:"hotspot_id", label:"ID Hotspot", type:"text", primary:true, auto:true },
@@ -411,6 +414,12 @@ async function loadHotspotEditorForItem(itemId){
   const slider = document.getElementById("hs-scale-slider");
   slider.value = currentScale;
   document.getElementById("hs-scale-value").textContent = currentScale.toFixed(1) + "x";
+
+  const currentHotspotScale = Number(item.hotspot_scale) > 0 ? Number(item.hotspot_scale) : 1;
+  const hsScaleSlider = document.getElementById("hs-hotspot-scale-slider");
+  hsScaleSlider.value = currentHotspotScale;
+  document.getElementById("hs-hotspot-scale-value").textContent = currentHotspotScale.toFixed(1) + "x";
+
   document.getElementById("hs-scale-row").style.display = "block";
 }
 
@@ -425,14 +434,22 @@ document.getElementById("hs-scale-slider").addEventListener("input", (ev) => {
   if (hotspotEditor) hotspotEditor.setScaleMultiplier(v);
 });
 
+document.getElementById("hs-hotspot-scale-slider").addEventListener("input", (ev) => {
+  const v = parseFloat(ev.target.value);
+  document.getElementById("hs-hotspot-scale-value").textContent = v.toFixed(1) + "x";
+  if (hotspotEditor) hotspotEditor.setHotspotScaleMultiplier(v);
+});
+
 document.getElementById("hs-scale-save-btn").addEventListener("click", async () => {
   if (!currentEditorItem) return;
-  const v = parseFloat(document.getElementById("hs-scale-slider").value);
-  const payload = { ...currentEditorItem, model_scale: v };
+  const modelScaleV = parseFloat(document.getElementById("hs-scale-slider").value);
+  const hotspotScaleV = parseFloat(document.getElementById("hs-hotspot-scale-slider").value);
+  const payload = { ...currentEditorItem, model_scale: modelScaleV, hotspot_scale: hotspotScaleV };
   try {
     await window.Api.adminSave(window.passcode, "Items", payload);
-    currentEditorItem.model_scale = v;
-    window.showMsg("Skala disimpan.");
+    currentEditorItem.model_scale = modelScaleV;
+    currentEditorItem.hotspot_scale = hotspotScaleV;
+    window.showMsg("Skala model & saiz hotspot disimpan.");
     if (window.currentSheetIsHotspots && window.currentSheetIsHotspots()) window.loadSheet();
   } catch (err) {
     window.showMsg(err.message, true);
