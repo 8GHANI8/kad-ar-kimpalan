@@ -104,7 +104,7 @@
 <script src="../shared/js/api.js"></script>
 <script src="../shared/js/models.js"></script>
 <script type="module">
-import { startARViewer } from "../shared/js/ar-core.js";
+import { startARViewer, flattenLeafItems } from "../shared/js/ar-core.js";
 
 const params = new URLSearchParams(location.search);
 const topicId = params.get("topic");
@@ -126,6 +126,7 @@ const mcqFeedback = document.getElementById("mcq-feedback");
 const btnNextItem = document.getElementById("btn-next-item");
 
 let bundle = null;
+let leafItems = []; // senarai RATA item/sub-item yang boleh diimbas (kuiz cuma faham ini, bukan pokok)
 let student = null; // {nama, kelas, institusi}
 let order = [];      // items dalam urutan rawak
 let currentIdx = 0;
@@ -167,12 +168,12 @@ document.getElementById("btn-start-quiz").addEventListener("click", startQuizSes
 async function startQuizSession(){
   screenIntro.style.display = "none";
   stageAr.style.display = "block";
-  order = shuffle(bundle.items);
+  order = shuffle(leafItems);
   totalPossible = order.length * 2;
   currentIdx = 0;
   score = 0;
 
-  arSession = await startARViewer(document.getElementById("ar-container"), topicId, bundle.items, {
+  arSession = await startARViewer(document.getElementById("ar-container"), topicId, leafItems, {
     onTargetFound: (item) => { visibleItemIds.add(item.item_id); updateConfirmState(); },
     onTargetLost: (item) => { visibleItemIds.delete(item.item_id); updateConfirmState(); },
     onError: (err) => {
@@ -317,11 +318,12 @@ async function boot(){
   }
   try {
     bundle = await Api.getTopicBundle(topicId);
+    leafItems = flattenLeafItems(bundle.items);
     document.title = "Kuiz — " + bundle.topic.title;
     document.getElementById("identify-topic-title").textContent = bundle.topic.title;
     document.getElementById("intro-title").textContent = bundle.topic.title;
     document.getElementById("intro-desc").innerHTML =
-      `Kamu akan diminta cari <strong style="color:var(--text);">${bundle.items.length} item</strong> guna kamera. ` +
+      `Kamu akan diminta cari <strong style="color:var(--text);">${leafItems.length} item</strong> guna kamera. ` +
       `Bila jumpa, tekan "Ini Dia!" untuk sahkan, kemudian jawab satu soalan pendek. Setiap item bernilai 2 markah.`;
   } catch (err) {
     document.getElementById("identify-topic-title").textContent = "Ralat: " + err.message;

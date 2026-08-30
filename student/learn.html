@@ -39,6 +39,7 @@
   </div>
 
   <button class="info-toggle-btn" id="btn-info">ℹ Keterangan</button>
+  <button class="info-toggle-btn" id="btn-youtube" style="display:none;top:140px;">▶ Video Penerangan</button>
 
   <div class="item-picker" id="item-picker"></div>
 
@@ -69,7 +70,7 @@
 <script src="../shared/js/api.js"></script>
 <script src="../shared/js/models.js"></script>
 <script type="module">
-import { startARViewer, start3DViewer } from "../shared/js/ar-core.js";
+import { startARViewer, start3DViewer, flattenLeafItems } from "../shared/js/ar-core.js";
 
 const params = new URLSearchParams(location.search);
 const topicId = params.get("topic");
@@ -85,10 +86,23 @@ const hsInfo = document.getElementById("hs-info");
 const toastAr = document.getElementById("toast-ar");
 const toastArText = document.getElementById("toast-ar-text");
 const btnInfo = document.getElementById("btn-info");
+const btnYoutube = document.getElementById("btn-youtube");
 const infoPanel = document.getElementById("item-info-panel");
 const infoTitle = document.getElementById("info-title");
 const infoSummary = document.getElementById("info-summary");
 const infoSpecsList = document.getElementById("info-specs");
+
+btnYoutube.addEventListener("click", () => {
+  const item = currentDisplayedItem();
+  if (item && item.youtube_url) window.open(item.youtube_url, "_blank");
+});
+
+// URL YouTube PILIHAN sahaja - butang hanya nampak bila item semasa
+// memang ada youtube_url diisi (tiada placeholder kosong, ikut prinsip
+// "jangan papar kawalan untuk media yang tiada").
+function updateYoutubeButton(item){
+  btnYoutube.style.display = (item && item.youtube_url) ? "block" : "none";
+}
 
 document.getElementById("hotspot-close").addEventListener("click", () => hotspotPanel.classList.remove("show"));
 document.getElementById("item-info-close").addEventListener("click", () => {
@@ -97,8 +111,10 @@ document.getElementById("item-info-close").addEventListener("click", () => {
 });
 
 let bundle = null;
+let leafItems = []; // senarai RATA item/sub-item yang boleh dipaparkan (utk AR & pilihan lalai)
 let currentMode = "3d";
-let currentItemIndex = 0;
+let currentItem = null;     // item/sub-item LEAF yang sedang dipilih dalam Mod 3D
+let expandedParentId = null; // item induk mana sedang terbuka (papar sub-item) dalam picker
 let threeSession = null;
 let arSession = null;
 let arCurrentItem = null; // item terkini dikesan dalam Mod AR (utk butang Keterangan)
@@ -120,7 +136,7 @@ function showHotspot(hit){
 }
 
 function currentDisplayedItem(){
-  if (currentMode === "3d") return bundle.items[currentItemIndex];
+  if (currentMode === "3d") return currentItem;
   return arCurrentItem;
 }
 
@@ -153,18 +169,47 @@ btnInfo.addEventListener("click", () => {
   btnInfo.classList.toggle("active", infoPanel.classList.contains("show"));
 });
 
+// Sub-item PILIHAN: item TANPA subItems berkelakuan SAMA PERSIS macam
+// sebelum ciri ini wujud (klik terus papar model). Item DENGAN subItems
+// jadi folder navigasi - klik buka/tutup senarai anaknya (indent, garis
+// putus-putus) sebaris; klik salah satu anak barulah papar model.
 function renderItemPicker(){
   itemPicker.innerHTML = "";
-  bundle.items.forEach((item, i) => {
+  bundle.items.forEach((item) => {
+    const hasChildren = item.subItems && item.subItems.length > 0;
     const b = document.createElement("button");
-    b.textContent = item.title;
-    if (i === currentItemIndex && currentMode === "3d") b.classList.add("active");
+    b.textContent = (hasChildren ? (expandedParentId === item.item_id ? "▾ " : "▸ ") : "") + item.title;
+    if (hasChildren) {
+      if (expandedParentId === item.item_id) b.classList.add("active");
+    } else if (currentItem && currentItem.item_id === item.item_id && currentMode === "3d") {
+      b.classList.add("active");
+    }
     b.addEventListener("click", () => {
-      currentItemIndex = i;
+      if (hasChildren) {
+        expandedParentId = (expandedParentId === item.item_id) ? null : item.item_id;
+        renderItemPicker();
+        return;
+      }
+      currentItem = item;
       renderItemPicker();
       if (currentMode === "3d") load3D(true);
     });
     itemPicker.appendChild(b);
+
+    if (hasChildren && expandedParentId === item.item_id) {
+      item.subItems.forEach(sub => {
+        const sb = document.createElement("button");
+        sb.textContent = sub.title;
+        sb.classList.add("sub-item-btn");
+        if (currentItem && currentItem.item_id === sub.item_id && currentMode === "3d") sb.classList.add("active");
+        sb.addEventListener("click", () => {
+          currentItem = sub;
+          renderItemPicker();
+          if (currentMode === "3d") load3D(true);
+        });
+        itemPicker.appendChild(sb);
+      });
+    }
   });
   itemPicker.style.display = currentMode === "3d" ? "flex" : "none";
 }
@@ -176,13 +221,14 @@ function load3D(preserveInfoPanel){
     btnInfo.classList.remove("active");
   }
   if (threeSession) threeSession.stop();
-  const item = bundle.items[currentItemIndex];
-  hudTitle.textContent = item.title;
+  if (!currentItem) return; // tiada leaf dipilih lagi (jarang berlaku - lihat boot())
+  hudTitle.textContent = currentItem.title;
   hudStatusText.textContent = "Mod 3D — putar & ketik bahagian oren";
-  threeSession = start3DViewer(document.getElementById("stage"), item, {
+  threeSession = start3DViewer(document.getElementById("stage"), currentItem, {
     onHotspotClick: showHotspot
   });
-  if (preserveInfoPanel && infoPanel.classList.contains("show")) renderItemInfo(item);
+  updateYoutubeButton(currentItem);
+  if (preserveInfoPanel && infoPanel.classList.contains("show")) renderItemInfo(currentItem);
 }
 
 async function loadAR(){
@@ -190,12 +236,14 @@ async function loadAR(){
   infoPanel.classList.remove("show");
   btnInfo.classList.remove("active");
   arCurrentItem = null;
+  updateYoutubeButton(null);
   hudStatusText.textContent = "Memulakan kamera…";
-  arSession = await startARViewer(document.getElementById("ar-container"), topicId, bundle.items, {
+  arSession = await startARViewer(document.getElementById("ar-container"), topicId, leafItems, {
     onTargetFound: (item) => {
       hudTitle.textContent = item.title;
       hudStatusText.textContent = "Kad dikesan ✓";
       arCurrentItem = item;
+      updateYoutubeButton(item);
       // kalau panel keterangan sedang terbuka, kemaskini terus ikut kad baru
       if (infoPanel.classList.contains("show")) renderItemInfo(item);
     },
@@ -246,12 +294,18 @@ async function boot(){
   }
   try {
     bundle = await Api.getTopicBundle(topicId);
-    if (!bundle.items.length){
+    leafItems = flattenLeafItems(bundle.items);
+    if (!leafItems.length){
       hudTitle.textContent = bundle.topic.title;
       hudStatusText.textContent = "Tiada item dalam topik ini lagi";
       return;
     }
     document.title = bundle.topic.title;
+    currentItem = leafItems[0];
+    // kalau leaf pertama tu sebenarnya sub-item, buka terus induknya supaya
+    // picker tak nampak "kosong" (tiada apa ditanda aktif) pada mulanya.
+    const parentOfFirst = bundle.items.find(it => it.subItems && it.subItems.some(s => s.item_id === currentItem.item_id));
+    if (parentOfFirst) expandedParentId = parentOfFirst.item_id;
     renderItemPicker();
     load3D();
   } catch (err) {

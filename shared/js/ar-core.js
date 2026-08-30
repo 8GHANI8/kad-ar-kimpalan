@@ -61,6 +61,24 @@ export function addLights(scene){
 // hotspot marker bersaiz BERKADAR dengan saiz model (modelRadius) - dahulu
 // saiz tetap (0.045 unit) tak kira besar/kecil model, jadi nampak gergasi
 // pada model kecil (cth pemegang elektrod) dan mikroskopik pada model besar.
+// Sub-item PILIHAN: bundle.items dari server boleh jadi POKOK (item induk
+// dengan subItems[]). AR & Kuiz cuma faham senarai RATA "item yang boleh
+// diimbas/dilihat terus" (setiap satu ada model_ref/target_index sendiri) -
+// induk yang ADA subItems dianggap folder navigasi sahaja (tiada model
+// sendiri), jadi digantikan dengan anak-anaknya; item TANPA subItems terus
+// masuk apa adanya (macam sebelum ciri sub-item wujud - tiada perubahan).
+export function flattenLeafItems(items){
+  const out = [];
+  (items || []).forEach(item => {
+    if (item.subItems && item.subItems.length) {
+      out.push(...item.subItems);
+    } else {
+      out.push(item);
+    }
+  });
+  return out;
+}
+
 export function attachHotspots(group, hotspots, modelRadius, hotspotScaleMult){
   const r = modelRadius || 0.3;
   const hsMult = hotspotScaleMult || 1;

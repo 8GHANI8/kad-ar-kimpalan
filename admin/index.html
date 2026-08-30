@@ -68,6 +68,46 @@
       </div>
     </div>
 
+    <div class="panel" id="items-cms-panel" style="display:none;">
+      <div class="items-cms-layout">
+        <div class="items-cms-left">
+          <label for="items-search">Cari Item</label>
+          <input type="text" id="items-search" placeholder="🔍 Taip tajuk atau ID...">
+          <div class="items-tree" id="items-tree"></div>
+          <button type="button" class="btn block" id="btn-add-item">+ Tambah Item Baru</button>
+        </div>
+
+        <div class="items-cms-right">
+          <div id="items-editor-empty" style="color:var(--text-dim);font-size:13px;padding:30px 0;text-align:center;">
+            Pilih item di sebelah kiri untuk edit, atau tekan "+ Tambah Item Baru".
+          </div>
+
+          <div id="items-editor-body" style="display:none;">
+            <span class="items-parent-badge" id="items-parent-badge" style="display:none;">Sub-item bagi: <span id="items-parent-name">—</span></span>
+            <h2 id="items-editor-title">Item Baru</h2>
+            <form id="items-editor-form">
+              <div class="items-form-grid" id="items-form-fields"></div>
+            </form>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+              <button type="submit" form="items-editor-form" class="btn">Simpan</button>
+              <button type="button" class="btn ghost" id="btn-add-subitem">+ Tambah Sub-item Di Sini</button>
+              <button type="button" class="btn danger" id="btn-delete-item" style="display:none;">Padam</button>
+            </div>
+
+            <div id="items-preview-viewer">
+              <p id="items-preview-placeholder">Pratonton model akan muncul di sini selepas item disimpan (perlu ID Item sedia ada).</p>
+            </div>
+
+            <div id="items-youtube-preview" style="display:none;margin-top:12px;padding:12px 14px;background:var(--bg-3);border-radius:var(--radius);font-size:12px;">
+              <span style="color:var(--text-dim);">YouTube:</span>
+              <span id="items-youtube-url" style="color:var(--flash);word-break:break-all;"></span>
+              <a href="#" target="_blank" id="items-youtube-open" class="btn ghost" style="margin-left:10px;padding:5px 12px;font-size:10.5px;">Buka Video</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="panel" id="table-panel">
       <h2 id="table-title">—</h2>
       <div class="admin-table-wrap">
@@ -111,10 +151,12 @@ const SHEET_CONFIGS = {
     { key:"title", label:"Tajuk", type:"text" },
     { key:"target_index", label:"ID Penanda ArUco (cth: 0, 1, 2...)", type:"number" },
     { key:"model_ref", label:"Model Ref (nama fungsi dalam models.js)", type:"text" },
-    { key:"summary", label:"Ringkasan", type:"textarea" },
-    { key:"specs", label:"Spesifikasi (pisah guna tanda | )", type:"textarea" },
+    { key:"summary", label:"Ringkasan", type:"textarea", full:true },
+    { key:"specs", label:"Spesifikasi (pisah guna tanda | )", type:"textarea", full:true },
     { key:"model_scale", label:"Skala Model (kosong = guna default kod)", type:"number" },
-    { key:"hotspot_scale", label:"Saiz Hotspot (kosong = default 1x)", type:"number" }
+    { key:"hotspot_scale", label:"Saiz Hotspot (kosong = default 1x)", type:"number" },
+    { key:"youtube_url", label:"URL YouTube (pilihan - penerangan tambahan)", type:"text", full:true },
+    { key:"parent_item_id", label:"ID Item Induk (sub-item sahaja - diurus automatik)", type:"text", hiddenInCms:true }
   ]},
   Hotspots: { fields: [
     { key:"hotspot_id", label:"ID Hotspot", type:"text", primary:true, auto:true },
@@ -141,6 +183,10 @@ const SHEET_CONFIGS = {
     { key:"score", label:"Skor" }, { key:"total_possible", label:"Maks" }, { key:"percentage", label:"%" }
   ], readOnly:true }
 };
+// SHEET_CONFIGS ialah 'const' skrip klasik - dedahkan ke window supaya
+// skrip module (alat CMS Items) boleh capai metadata medan yang sama,
+// elak ulang tulis senarai medan dua tempat.
+window.SHEET_CONFIGS = SHEET_CONFIGS;
 
 // window.passcode (bukan 'let' biasa) supaya skrip module (alat hotspot)
 // boleh baca nilai semasa - 'let' skrip klasik tak capai dari skrip module.
@@ -257,6 +303,15 @@ async function loadSheet(){
   document.getElementById("hotspot-tool-panel").style.display = (currentSheet === "Hotspots") ? "block" : "none";
   if (currentSheet === "Hotspots" && window.initHotspotTool) window.initHotspotTool();
 
+  const isItems = currentSheet === "Items";
+  document.getElementById("items-cms-panel").style.display = isItems ? "block" : "none";
+  document.getElementById("table-panel").style.display = isItems ? "none" : "block";
+  document.getElementById("form-panel").style.display = isItems ? "none" : (cfg.readOnly ? "none" : "block");
+  if (isItems) {
+    if (window.initItemsCms) window.initItemsCms();
+    return; // Items diurus sepenuhnya oleh CMS module - tak guna jadual generik lagi
+  }
+
   document.getElementById("table-title").textContent = currentSheet;
   const head = document.getElementById("table-head");
   const body = document.getElementById("table-body");
@@ -360,7 +415,7 @@ if (window.passcode) boot();
 </script>
 <script src="../shared/js/models.js"></script>
 <script type="module">
-import { startHotspotEditor } from "../shared/js/ar-core.js";
+import { startHotspotEditor, start3DViewer } from "../shared/js/ar-core.js";
 
 let hotspotEditor = null;
 let currentEditorItem = null;
@@ -515,6 +570,284 @@ document.getElementById("hs-delete-btn").addEventListener("click", async () => {
 // dipanggil dari skrip klasik (loadSheet) setiap kali tab Hotspots dibuka
 window.initHotspotTool = function(){
   populateItemSelect();
+};
+
+// ============================================================================
+// ITEMS CMS - master/detail + pokok item/sub-item boleh lipat
+// ============================================================================
+let allItemsFlat = [];
+let selectedItemId = null;
+let isNewItem = false;
+let pendingParentId = null; // diisi bila "+ Tambah Sub-item Di Sini" ditekan
+let itemsPreviewSession = null;
+const expandedTreeIds = new Set();
+
+function itemsFieldConfig(){ return window.SHEET_CONFIGS.Items.fields; }
+
+function renderItemsFormFields(){
+  const grid = document.getElementById("items-form-fields");
+  grid.innerHTML = "";
+  itemsFieldConfig().forEach(f => {
+    if (f.hiddenInCms) return; // parent_item_id diurus terus oleh kod (tree + butang), bukan input nampak
+    const wrap = document.createElement("div");
+    if (f.full) wrap.className = "full-width";
+    const label = document.createElement("label");
+    label.textContent = f.label;
+    wrap.appendChild(label);
+    const input = f.type === "textarea" ? document.createElement("textarea") : document.createElement("input");
+    if (f.type !== "textarea") input.type = f.type === "number" ? "number" : "text";
+    input.id = "items-field-" + f.key;
+    if (f.primary && !isNewItem) input.disabled = true;
+    wrap.appendChild(input);
+    grid.appendChild(wrap);
+  });
+}
+
+function fillItemsForm(item){
+  itemsFieldConfig().forEach(f => {
+    const el = document.getElementById("items-field-" + f.key);
+    if (el) el.value = item ? (item[f.key] || "") : "";
+  });
+}
+
+function updateParentBadge(parentId){
+  const badge = document.getElementById("items-parent-badge");
+  if (!parentId) { badge.style.display = "none"; return; }
+  const parent = allItemsFlat.find(i => i.item_id === parentId);
+  document.getElementById("items-parent-name").textContent = parent ? parent.title : parentId;
+  badge.style.display = "inline-block";
+}
+
+function clearItemsPreview(){
+  if (itemsPreviewSession) { itemsPreviewSession.stop(); itemsPreviewSession = null; }
+  const viewer = document.getElementById("items-preview-viewer");
+  viewer.innerHTML = `<p id="items-preview-placeholder">Pratonton model akan muncul di sini selepas item disimpan (perlu ID Item sedia ada).</p>`;
+}
+
+function loadItemsPreview(item){
+  if (itemsPreviewSession) { itemsPreviewSession.stop(); itemsPreviewSession = null; }
+  const viewer = document.getElementById("items-preview-viewer");
+  if (!item || !item.model_ref) {
+    viewer.innerHTML = `<p id="items-preview-placeholder">Tiada model_ref diisi lagi untuk item ini.</p>`;
+    return;
+  }
+  viewer.innerHTML = "";
+  itemsPreviewSession = start3DViewer(viewer, item, {});
+}
+
+function updateYoutubePreview(item){
+  const box = document.getElementById("items-youtube-preview");
+  if (!item || !item.youtube_url) { box.style.display = "none"; return; }
+  document.getElementById("items-youtube-url").textContent = item.youtube_url;
+  document.getElementById("items-youtube-open").href = item.youtube_url;
+  box.style.display = "block";
+}
+
+function selectItem(itemId){
+  const item = allItemsFlat.find(i => i.item_id === itemId);
+  if (!item) return;
+  selectedItemId = itemId;
+  isNewItem = false;
+  pendingParentId = null;
+
+  document.getElementById("items-editor-empty").style.display = "none";
+  document.getElementById("items-editor-body").style.display = "block";
+  renderItemsFormFields();
+  fillItemsForm(item);
+  document.getElementById("items-editor-title").textContent = `Edit: ${item.title || item.item_id}`;
+  document.getElementById("btn-delete-item").style.display = "inline-flex";
+  updateParentBadge(item.parent_item_id);
+  loadItemsPreview(item);
+  updateYoutubePreview(item);
+  renderItemsTree();
+}
+
+function startNewItem(parentId){
+  selectedItemId = null;
+  isNewItem = true;
+  pendingParentId = parentId || null;
+
+  document.getElementById("items-editor-empty").style.display = "none";
+  document.getElementById("items-editor-body").style.display = "block";
+  renderItemsFormFields();
+  fillItemsForm(null);
+  if (parentId) {
+    const parent = allItemsFlat.find(i => i.item_id === parentId);
+    if (parent) {
+      const topicEl = document.getElementById("items-field-topic_id");
+      if (topicEl) topicEl.value = parent.topic_id;
+    }
+  }
+  document.getElementById("items-editor-title").textContent = parentId ? "Sub-item Baru" : "Item Baru";
+  document.getElementById("btn-delete-item").style.display = "none";
+  updateParentBadge(parentId);
+  clearItemsPreview();
+  updateYoutubePreview(null);
+  renderItemsTree();
+}
+
+function renderItemsTree(){
+  const container = document.getElementById("items-tree");
+  const search = (document.getElementById("items-search").value || "").trim().toLowerCase();
+  container.innerHTML = "";
+
+  const byTopic = {};
+  allItemsFlat.filter(i => !i.parent_item_id).forEach(item => {
+    (byTopic[item.topic_id] = byTopic[item.topic_id] || []).push(item);
+  });
+  const topicIds = Object.keys(byTopic).sort();
+
+  if (!topicIds.length) {
+    container.innerHTML = `<p class="items-tree-empty-hint">Tiada item lagi. Tekan "+ Tambah Item Baru" untuk mula.</p>`;
+    return;
+  }
+
+  function matchesSearch(row){
+    if (!search) return true;
+    return (row.title || "").toLowerCase().includes(search) || (row.item_id || "").toLowerCase().includes(search);
+  }
+
+  topicIds.forEach(topicId => {
+    const topLevel = byTopic[topicId];
+    const visibleItems = topLevel.filter(item => {
+      if (!search) return true;
+      const children = allItemsFlat.filter(c => c.parent_item_id === item.item_id);
+      return matchesSearch(item) || children.some(matchesSearch);
+    });
+    if (!visibleItems.length) return;
+
+    const header = document.createElement("div");
+    header.className = "items-tree-topic-header";
+    header.textContent = topicId;
+    container.appendChild(header);
+
+    visibleItems.forEach(item => {
+      const children = allItemsFlat.filter(c => c.parent_item_id === item.item_id);
+      const hasChildren = children.length > 0;
+      const isExpanded = expandedTreeIds.has(item.item_id) || (!!search && hasChildren);
+
+      const node = document.createElement("div");
+      node.className = "items-tree-node";
+      if (selectedItemId === item.item_id) node.classList.add("selected");
+      const toggle = document.createElement("span");
+      toggle.className = "items-tree-toggle";
+      toggle.textContent = hasChildren ? (isExpanded ? "▾" : "▸") : "•";
+      const labelSpan = document.createElement("span");
+      labelSpan.textContent = item.title || item.item_id;
+      node.appendChild(toggle);
+      node.appendChild(labelSpan);
+      node.addEventListener("click", (ev) => {
+        if (hasChildren && ev.target === toggle) {
+          if (expandedTreeIds.has(item.item_id)) expandedTreeIds.delete(item.item_id);
+          else expandedTreeIds.add(item.item_id);
+          renderItemsTree();
+          return;
+        }
+        selectItem(item.item_id);
+      });
+      container.appendChild(node);
+
+      if (hasChildren && isExpanded) {
+        children.forEach(child => {
+          if (search && !matchesSearch(child) && !matchesSearch(item)) return;
+          const cnode = document.createElement("div");
+          cnode.className = "items-tree-node sub";
+          if (selectedItemId === child.item_id) cnode.classList.add("selected");
+          const ctoggle = document.createElement("span");
+          ctoggle.className = "items-tree-toggle";
+          ctoggle.textContent = "•";
+          const clabel = document.createElement("span");
+          clabel.textContent = child.title || child.item_id;
+          cnode.appendChild(ctoggle);
+          cnode.appendChild(clabel);
+          cnode.addEventListener("click", () => selectItem(child.item_id));
+          container.appendChild(cnode);
+        });
+      }
+    });
+  });
+}
+
+async function loadItemsTree(){
+  const container = document.getElementById("items-tree");
+  container.innerHTML = `<p class="items-tree-empty-hint">Memuatkan…</p>`;
+  try {
+    allItemsFlat = await window.Api.adminList("Items");
+  } catch (err) {
+    container.innerHTML = `<p class="items-tree-empty-hint" style="color:var(--bad);">${err.message}</p>`;
+    return;
+  }
+  renderItemsTree();
+  if (!selectedItemId && !isNewItem) {
+    document.getElementById("items-editor-empty").style.display = "block";
+    document.getElementById("items-editor-body").style.display = "none";
+  }
+}
+
+document.getElementById("items-search").addEventListener("input", () => renderItemsTree());
+document.getElementById("btn-add-item").addEventListener("click", () => startNewItem(null));
+document.getElementById("btn-add-subitem").addEventListener("click", () => {
+  if (!selectedItemId) return;
+  startNewItem(selectedItemId);
+});
+
+document.getElementById("items-editor-form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const payload = {};
+  itemsFieldConfig().forEach(f => {
+    if (f.hiddenInCms) return;
+    const el = document.getElementById("items-field-" + f.key);
+    if (el) payload[f.key] = el.value;
+  });
+  if (!payload.item_id) {
+    window.showMsg("Sila isi ID Item.", true);
+    return;
+  }
+  if (pendingParentId) {
+    payload.parent_item_id = pendingParentId;
+  } else if (!isNewItem && selectedItemId) {
+    const existing = allItemsFlat.find(i => i.item_id === selectedItemId);
+    if (existing && existing.parent_item_id) payload.parent_item_id = existing.parent_item_id;
+  }
+
+  const newId = payload.item_id;
+  try {
+    await window.Api.adminSave(window.passcode, "Items", payload);
+    window.showMsg("Item disimpan.");
+    await loadItemsTree();
+    selectItem(newId);
+  } catch (err) {
+    window.showMsg(err.message, true);
+  }
+});
+
+document.getElementById("btn-delete-item").addEventListener("click", async () => {
+  if (!selectedItemId) return;
+  const children = allItemsFlat.filter(i => i.parent_item_id === selectedItemId);
+  const msg = children.length
+    ? `Padam item ini akan turut PADAM ${children.length} sub-item di bawahnya. Teruskan?`
+    : "Padam item ini?";
+  if (!confirm(msg)) return;
+  try {
+    for (const child of children) {
+      await window.Api.adminDelete(window.passcode, "Items", child.item_id);
+    }
+    await window.Api.adminDelete(window.passcode, "Items", selectedItemId);
+    window.showMsg("Dipadam.");
+    selectedItemId = null;
+    isNewItem = false;
+    clearItemsPreview();
+    await loadItemsTree();
+    document.getElementById("items-editor-empty").style.display = "block";
+    document.getElementById("items-editor-body").style.display = "none";
+  } catch (err) {
+    window.showMsg(err.message, true);
+  }
+});
+
+// dipanggil dari skrip klasik (loadSheet) setiap kali tab Items dibuka
+window.initItemsCms = function(){
+  loadItemsTree();
 };
 </script>
 </body>
