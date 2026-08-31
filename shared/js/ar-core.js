@@ -79,6 +79,53 @@ export function flattenLeafItems(items){
   return out;
 }
 
+// ============================================================================
+// MEDIA: Item/Sub-item boleh guna model_ref (3D) ATAU ar_video_url (video)
+// ATAU tiada visual sama sekali (contoh: youtube_url sahaja). Fungsi ini
+// dipanggil merata (learn.html, quiz.html, ar-core.js sendiri) sebagai SATU
+// sumber kebenaran - elak logik "ada media apa" bersepah dalam banyak fail.
+// ============================================================================
+export function itemHasModel(item){ return !!(item && item.model_ref); }
+export function itemHasVideo(item){ return !!(item && item.ar_video_url); }
+
+function buildVideoPlaneGroup(item){
+  const group = new THREE.Group();
+  const video = document.createElement("video");
+  video.src = item.ar_video_url;
+  video.crossOrigin = "anonymous";
+  video.loop = true;
+  video.muted = true;      // wajib utk mobile - main sebenar dikawal oleh butang ▶ kita sendiri
+  video.playsInline = true;
+  video.preload = "metadata"; // JANGAN preload seluruh fail (elak banyak video dimuat serentak)
+
+  const texture = new THREE.VideoTexture(video);
+  if ("colorSpace" in texture) texture.colorSpace = THREE.SRGBColorSpace;
+  const material = new THREE.MeshBasicMaterial({ map: texture, toneMapped: false, side: THREE.DoubleSide });
+
+  // Saiz lalai munasabah (nisbah 16:9) - BUKAN dari Sheet lagi (Bahagian I:
+  // guna default dulu). model_scale sedia ada tetap boleh besar/kecilkan
+  // plane ini sama macam model 3D, sebab ia diskala pada peringkat GROUP
+  // (buildFinalMatrix), bukan di sini - jadi "video_scale" berfungsi PERCUMA
+  // tanpa lajur Sheet baru.
+  const planeWidth = 1.2;
+  const planeHeight = planeWidth * (9 / 16);
+  const plane = new THREE.Mesh(new THREE.PlaneGeometry(planeWidth, planeHeight), material);
+  group.add(plane);
+
+  group.userData.isVideoPlane = true;
+  group.userData.video = video;
+  group.userData.videoTexture = texture;
+  return group;
+}
+
+function disposeVideo(group){
+  const v = group && group.userData && group.userData.video;
+  if (!v) return;
+  v.pause();
+  v.removeAttribute("src");
+  v.load(); // paksa browser lepaskan buffer video (Bahagian G: jangan simpan video tak guna dalam memori)
+}
+
 export function attachHotspots(group, hotspots, modelRadius, hotspotScaleMult){
   const r = modelRadius || 0.3;
   const hsMult = hotspotScaleMult || 1;
@@ -136,10 +183,29 @@ async function buildScaledGroup(item){
 }
 
 export async function buildItemVisual(item){
-  const { group } = await buildScaledGroup(item);
+  let group;
+  if (itemHasModel(item)) {
+    const built = await buildScaledGroup(item); // GLB/placeholder + model_scale sudah terbina
+    group = built.group;
+  } else if (itemHasVideo(item)) {
+    group = buildVideoPlaneGroup(item);
+    const itemScale = Number(item.model_scale);
+    if (!isNaN(itemScale) && itemScale > 0) group.scale.setScalar(itemScale);
+  } else {
+    // Tiada model_ref ATAU ar_video_url - cth item youtube_url sahaja.
+    // Group KOSONG, sengaja tiada placeholder (Bahagian E: jangan cipta
+    // placeholder 3D tak perlu utk kandungan berasaskan video/pautan luar).
+    group = new THREE.Group();
+    group.userData.isEmpty = true;
+  }
+
   const modelRadius = getBoundingRadius(group);
+  // Hotspot cuma bermakna utk model 3D (Bahagian 19 spesifikasi awal:
+  // kandungan video tak perlukan hotspot).
   const hotspotScaleMult = Number(item.hotspot_scale) || 1;
-  const hotspotMeshes = attachHotspots(group, item.hotspots || [], modelRadius, hotspotScaleMult);
+  const hotspotMeshes = itemHasModel(item)
+    ? attachHotspots(group, item.hotspots || [], modelRadius, hotspotScaleMult)
+    : [];
   return { group, hotspotMeshes };
 }
 
@@ -163,6 +229,21 @@ function makeRaycastHandler(camera, getMeshMap, onHit){
 }
 
 // ==================== 3D MODE (no camera) ====================
+// Butang ▶ MAIN / ⏸ JEDA yang sama dipakai dalam Mod 3D dan Mod AR - main
+// perlu ditekan pengguna (Bahagian H: jangan andaikan autoplay bunyi
+// berfungsi di telefon).
+function attachVideoPlayButton(container, video, style){
+  const btn = document.createElement("button");
+  btn.textContent = "▶ MAIN";
+  btn.style.cssText = style || "position:absolute;bottom:80px;left:50%;transform:translateX(-50%);z-index:20;font-family:monospace;font-weight:600;font-size:13px;padding:10px 18px;background:#ff7a1a;color:#111;border:none;border-radius:24px;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.5);";
+  container.appendChild(btn);
+  btn.addEventListener("click", () => {
+    if (video.paused) { video.play(); btn.textContent = "⏸ JEDA"; }
+    else { video.pause(); btn.textContent = "▶ MAIN"; }
+  });
+  return btn;
+}
+
 export function start3DViewer(container, item, { onHotspotClick } = {}){
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -211,6 +292,8 @@ export function start3DViewer(container, item, { onHotspotClick } = {}){
     controls.minDistance = radius * 0.8;
     controls.maxDistance = radius * 8;
     controls.update();
+
+    if (group.userData.isVideoPlane) attachVideoPlayButton(container, group.userData.video);
   })();
 
   const onPointerDown = makeRaycastHandler(camera, () => hotspotMeshes, (hit) => {
@@ -235,6 +318,12 @@ export function start3DViewer(container, item, { onHotspotClick } = {}){
       }
       if (group.userData.flicker) group.userData.flicker.intensity = 1.1 + Math.sin(t*30)*0.15 + (Math.random()-0.5)*0.2;
       if (group.userData.mixer) group.userData.mixer.update(dt); // animasi .glb dari Blender (kalau ada)
+      // THREE.VideoTexture biasanya auto-kemaskini, tapi ini jaring
+      // keselamatan murah tanpa risiko - pastikan tekstur sentiasa segar
+      // semasa video sedang main.
+      if (group.userData.videoTexture && group.userData.video && !group.userData.video.paused) {
+        group.userData.videoTexture.needsUpdate = true;
+      }
     }
     controls.update();
     renderer.render(scene, camera);
@@ -243,6 +332,7 @@ export function start3DViewer(container, item, { onHotspotClick } = {}){
   return {
     stop(){
       stopped = true;
+      if (group) disposeVideo(group);
       renderer.setAnimationLoop(null);
       window.removeEventListener("resize", onResize);
       renderer.domElement.removeEventListener("click", onPointerDown);
@@ -313,6 +403,13 @@ export function startHotspotEditor(container, item, hotspots, { onSurfaceClick, 
   }
 
   (async () => {
+    if (!itemHasModel(item)) {
+      // Item ini guna Video (ar_video_url), bukan Model 3D - hotspot tak
+      // berkenaan (Bahagian 19 spesifikasi awal). Papar mesej jelas
+      // dari terus tunjuk kotak generik yang mengelirukan.
+      container.innerHTML = `<p style="color:#a8a8ac;font-size:12px;padding:20px;margin:0;">Item ini guna kandungan <strong style="color:#f2f1ee;">Video</strong>, bukan Model 3D — hotspot tidak berkenaan untuk jenis kandungan ini.</p>`;
+      return;
+    }
     const built = await buildScaledGroup(item);
     if (stopped) return;
     group = built.group;
@@ -715,6 +812,36 @@ export async function startARViewer(container, topicId, items, {
   }
   window.addEventListener("resize", onResize);
 
+  // ---- kawalan main/jeda video AR: SATU butang dikongsi, dipindah/paparkan
+  // ikut kad video mana sedang aktif (elak banyak butang bertindih) ----
+  let activeVideoItemId = null;
+  let videoPlayBtn = null;
+  function showVideoControls(item, videoEl){
+    activeVideoItemId = item.item_id;
+    if (!videoPlayBtn) {
+      videoPlayBtn = attachVideoPlayButton(container, videoEl, "position:absolute;bottom:150px;left:50%;transform:translateX(-50%);z-index:20;font-family:monospace;font-weight:600;font-size:13px;padding:10px 18px;background:#ff7a1a;color:#111;border:none;border-radius:24px;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.5);");
+    } else {
+      // butang sedia ada - tukar video yang dikawalnya kepada kad BARU
+      // dikesan (buang & bina semula listener supaya tak terlekat pada
+      // video lama)
+      const fresh = videoPlayBtn.cloneNode(true);
+      videoPlayBtn.replaceWith(fresh);
+      videoPlayBtn = fresh;
+      videoPlayBtn.textContent = "▶ MAIN";
+      videoPlayBtn.addEventListener("click", () => {
+        if (videoEl.paused) { videoEl.play(); videoPlayBtn.textContent = "⏸ JEDA"; }
+        else { videoEl.pause(); videoPlayBtn.textContent = "▶ MAIN"; }
+      });
+    }
+    videoPlayBtn.style.display = "block";
+  }
+  function hideVideoControlsIfActive(item){
+    if (activeVideoItemId === item.item_id) {
+      activeVideoItemId = null;
+      if (videoPlayBtn) videoPlayBtn.style.display = "none";
+    }
+  }
+
   const animClock = new THREE.Clock();
   let running = true;
   function frame(){
@@ -759,6 +886,7 @@ export async function startARViewer(container, topicId, items, {
       if (!wasVisible[entry.item.item_id]) {
         wasVisible[entry.item.item_id] = true;
         onTargetFound && onTargetFound(entry.item);
+        if (entry.group.userData.isVideoPlane) showVideoControls(entry.item, entry.group.userData.video);
       }
     });
 
@@ -773,14 +901,23 @@ export async function startARViewer(container, topicId, items, {
         if (!locked) group.visible = false; // kalau locked, model kekal kelihatan walau kad hilang
         wasVisible[item.item_id] = false;
         onTargetLost && onTargetLost(item);
+        // kad hilang - jeda video (Bahagian H: jangan terus main video di
+        // latar bila kad dah tak dalam pandangan kamera)
+        if (group.userData.isVideoPlane && group.userData.video) {
+          group.userData.video.pause();
+          hideVideoControlsIfActive(item);
+        }
       }
     });
 
-    // animasi .glb dari Blender (kalau ada) - dikemaskini utk SEMUA item,
-    // bukan cuma yang sedang dilihat, supaya tak "tersentak" bila kad
-    // hilang-jumpa semula.
+    // animasi .glb dari Blender (kalau ada, utk SEMUA item supaya tak
+    // "tersentak" bila kad hilang-jumpa semula) + segar tekstur video yang
+    // sedang main & kelihatan - satu laluan sahaja.
     Object.values(groupsByMarkerId).forEach(({ group }) => {
       if (group.userData.mixer) group.userData.mixer.update(dt);
+      if (group.userData.videoTexture && group.userData.video && group.visible && !group.userData.video.paused) {
+        group.userData.videoTexture.needsUpdate = true;
+      }
     });
 
     renderer.render(scene, camera);
@@ -792,6 +929,7 @@ export async function startARViewer(container, topicId, items, {
     stop(){
       running = false;
       stream.getTracks().forEach(t => t.stop());
+      Object.values(groupsByMarkerId).forEach(({ group }) => disposeVideo(group));
       window.removeEventListener("resize", onResize);
       container.innerHTML = "";
     }

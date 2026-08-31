@@ -70,7 +70,7 @@
 <script src="../shared/js/api.js"></script>
 <script src="../shared/js/models.js"></script>
 <script type="module">
-import { startARViewer, start3DViewer, flattenLeafItems } from "../shared/js/ar-core.js";
+import { startARViewer, start3DViewer, flattenLeafItems, itemHasModel, itemHasVideo } from "../shared/js/ar-core.js";
 
 const params = new URLSearchParams(location.search);
 const topicId = params.get("topic");
@@ -214,6 +214,12 @@ function renderItemPicker(){
   itemPicker.style.display = currentMode === "3d" ? "flex" : "none";
 }
 
+function statusTextFor(item){
+  if (itemHasModel(item)) return "Mod 3D — putar & ketik bahagian oren";
+  if (itemHasVideo(item)) return "Video — tekan ▶ untuk main";
+  return "Tiada model/video untuk item ini";
+}
+
 function load3D(preserveInfoPanel){
   hotspotPanel.classList.remove("show");
   if (!preserveInfoPanel) {
@@ -223,7 +229,7 @@ function load3D(preserveInfoPanel){
   if (threeSession) threeSession.stop();
   if (!currentItem) return; // tiada leaf dipilih lagi (jarang berlaku - lihat boot())
   hudTitle.textContent = currentItem.title;
-  hudStatusText.textContent = "Mod 3D — putar & ketik bahagian oren";
+  hudStatusText.textContent = statusTextFor(currentItem);
   threeSession = start3DViewer(document.getElementById("stage"), currentItem, {
     onHotspotClick: showHotspot
   });
@@ -241,7 +247,7 @@ async function loadAR(){
   arSession = await startARViewer(document.getElementById("ar-container"), topicId, leafItems, {
     onTargetFound: (item) => {
       hudTitle.textContent = item.title;
-      hudStatusText.textContent = "Kad dikesan ✓";
+      hudStatusText.textContent = itemHasVideo(item) && !itemHasModel(item) ? "Kad dikesan ✓ — tekan ▶ untuk main" : "Kad dikesan ✓";
       arCurrentItem = item;
       updateYoutubeButton(item);
       // kalau panel keterangan sedang terbuka, kemaskini terus ikut kad baru

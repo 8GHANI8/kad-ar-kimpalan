@@ -68,6 +68,37 @@
       </div>
     </div>
 
+    <div class="panel" id="topics-cms-panel" style="display:none;">
+      <div class="items-cms-layout">
+        <div class="items-cms-left">
+          <label for="topics-search">Cari Topik</label>
+          <input type="text" id="topics-search" placeholder="🔍 Taip tajuk atau ID...">
+          <div class="items-tree" id="topics-list"></div>
+          <button type="button" class="btn block" id="btn-add-topic">+ Tambah Topik Baru</button>
+        </div>
+
+        <div class="items-cms-right">
+          <div id="topics-editor-empty" style="color:var(--text-dim);font-size:13px;padding:30px 0;text-align:center;">
+            Pilih topik di sebelah kiri untuk edit, atau tekan "+ Tambah Topik Baru".
+          </div>
+
+          <div id="topics-editor-body" style="display:none;">
+            <h2 id="topics-editor-title">Topik Baru</h2>
+            <form id="topics-editor-form">
+              <div class="items-form-grid" id="topics-form-fields"></div>
+            </form>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+              <button type="submit" form="topics-editor-form" class="btn">Simpan</button>
+              <button type="button" class="btn danger" id="btn-delete-topic" style="display:none;">Padam</button>
+            </div>
+
+            <p style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--arc);margin:16px 0 6px;">Pratonton (macam yang pelajar nampak)</p>
+            <div id="topics-preview-mount" style="max-width:340px;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="panel" id="items-cms-panel" style="display:none;">
       <div class="items-cms-layout">
         <div class="items-cms-left">
@@ -94,6 +125,7 @@
               <button type="button" class="btn danger" id="btn-delete-item" style="display:none;">Padam</button>
             </div>
 
+            <p id="items-preview-label" style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--arc);margin:16px 0 6px;"></p>
             <div id="items-preview-viewer">
               <p id="items-preview-placeholder">Pratonton model akan muncul di sini selepas item disimpan (perlu ID Item sedia ada).</p>
             </div>
@@ -156,6 +188,7 @@ const SHEET_CONFIGS = {
     { key:"model_scale", label:"Skala Model (kosong = guna default kod)", type:"number" },
     { key:"hotspot_scale", label:"Saiz Hotspot (kosong = default 1x)", type:"number" },
     { key:"youtube_url", label:"URL YouTube (pilihan - penerangan tambahan)", type:"text", full:true },
+    { key:"ar_video_url", label:"URL Video AR (pilihan - cth: videos/arc-length-ar.mp4 - GANTI model_ref, kosongkan model_ref kalau guna ini)", type:"text", full:true },
     { key:"parent_item_id", label:"ID Item Induk (sub-item sahaja - diurus automatik)", type:"text", hiddenInCms:true }
   ]},
   Hotspots: { fields: [
@@ -304,12 +337,18 @@ async function loadSheet(){
   if (currentSheet === "Hotspots" && window.initHotspotTool) window.initHotspotTool();
 
   const isItems = currentSheet === "Items";
+  const isTopics = currentSheet === "Topics";
   document.getElementById("items-cms-panel").style.display = isItems ? "block" : "none";
-  document.getElementById("table-panel").style.display = isItems ? "none" : "block";
-  document.getElementById("form-panel").style.display = isItems ? "none" : (cfg.readOnly ? "none" : "block");
+  document.getElementById("topics-cms-panel").style.display = isTopics ? "block" : "none";
+  document.getElementById("table-panel").style.display = (isItems || isTopics) ? "none" : "block";
+  document.getElementById("form-panel").style.display = (isItems || isTopics) ? "none" : (cfg.readOnly ? "none" : "block");
   if (isItems) {
     if (window.initItemsCms) window.initItemsCms();
     return; // Items diurus sepenuhnya oleh CMS module - tak guna jadual generik lagi
+  }
+  if (isTopics) {
+    if (window.initTopicsCms) window.initTopicsCms();
+    return; // Topics diurus sepenuhnya oleh CMS module - tak guna jadual generik lagi
   }
 
   document.getElementById("table-title").textContent = currentSheet;
@@ -415,7 +454,7 @@ if (window.passcode) boot();
 </script>
 <script src="../shared/js/models.js"></script>
 <script type="module">
-import { startHotspotEditor, start3DViewer } from "../shared/js/ar-core.js";
+import { startHotspotEditor, start3DViewer, itemHasModel, itemHasVideo } from "../shared/js/ar-core.js";
 
 let hotspotEditor = null;
 let currentEditorItem = null;
@@ -620,6 +659,7 @@ function updateParentBadge(parentId){
 
 function clearItemsPreview(){
   if (itemsPreviewSession) { itemsPreviewSession.stop(); itemsPreviewSession = null; }
+  document.getElementById("items-preview-label").textContent = "";
   const viewer = document.getElementById("items-preview-viewer");
   viewer.innerHTML = `<p id="items-preview-placeholder">Pratonton model akan muncul di sini selepas item disimpan (perlu ID Item sedia ada).</p>`;
 }
@@ -627,10 +667,13 @@ function clearItemsPreview(){
 function loadItemsPreview(item){
   if (itemsPreviewSession) { itemsPreviewSession.stop(); itemsPreviewSession = null; }
   const viewer = document.getElementById("items-preview-viewer");
-  if (!item || !item.model_ref) {
-    viewer.innerHTML = `<p id="items-preview-placeholder">Tiada model_ref diisi lagi untuk item ini.</p>`;
+  const label = document.getElementById("items-preview-label");
+  if (!item || (!itemHasModel(item) && !itemHasVideo(item))) {
+    label.textContent = "";
+    viewer.innerHTML = `<p id="items-preview-placeholder">Tiada model_ref atau ar_video_url diisi lagi untuk item ini.</p>`;
     return;
   }
+  label.textContent = itemHasModel(item) ? "Pratonton Model 3D" : "Pratonton Video AR";
   viewer.innerHTML = "";
   itemsPreviewSession = start3DViewer(viewer, item, {});
 }
@@ -848,6 +891,187 @@ document.getElementById("btn-delete-item").addEventListener("click", async () =>
 // dipanggil dari skrip klasik (loadSheet) setiap kali tab Items dibuka
 window.initItemsCms = function(){
   loadItemsTree();
+};
+
+// ============================================================================
+// TOPICS CMS - senarai rata + editor + pratonton kad SEBENAR (guna .topic-card
+// CSS sedia ada supaya nampak IDENTIK dengan apa pelajar lihat, tanpa reka
+// bentuk baharu).
+// ============================================================================
+let allTopicsFlat = [];
+let selectedTopicId = null;
+let isNewTopic = false;
+
+function topicsFieldConfig(){ return window.SHEET_CONFIGS.Topics.fields; }
+
+function renderTopicsFormFields(){
+  const grid = document.getElementById("topics-form-fields");
+  grid.innerHTML = "";
+  topicsFieldConfig().forEach(f => {
+    const wrap = document.createElement("div");
+    if (f.type === "textarea") wrap.className = "full-width";
+    const label = document.createElement("label");
+    label.textContent = f.label;
+    wrap.appendChild(label);
+    const input = f.type === "textarea" ? document.createElement("textarea") : document.createElement("input");
+    if (f.type !== "textarea") input.type = "text";
+    input.id = "topics-field-" + f.key;
+    if (f.primary && !isNewTopic) input.disabled = true;
+    wrap.appendChild(input);
+    grid.appendChild(wrap);
+  });
+}
+
+function fillTopicsForm(topic){
+  topicsFieldConfig().forEach(f => {
+    const el = document.getElementById("topics-field-" + f.key);
+    if (el) el.value = topic ? (topic[f.key] || "") : "";
+  });
+}
+
+// Pratonton guna markup + kelas CSS SAMA PERSIS dengan student/index.html -
+// sengaja tidak reka bentuk baharu, cuma paparkan semula yang sedia ada.
+function renderTopicPreview(topic){
+  const mount = document.getElementById("topics-preview-mount");
+  if (!topic) { mount.innerHTML = ""; return; }
+  mount.innerHTML = `
+    <div class="topic-card" style="pointer-events:none;">
+      <div class="tag-strip" style="background:${topic.accent_color || '#ff7a1a'}"></div>
+      <div class="body">
+        <div class="idx">TOPIK</div>
+        <h3>${topic.title || "(tiada tajuk)"}</h3>
+        <p>${topic.description || ""}</p>
+        <div class="modes">
+          <span class="btn" style="margin-top:10px;">Belajar</span>
+          <span class="btn ghost" style="margin-top:10px;">Kuiz</span>
+          <span class="btn ghost" style="margin-top:10px;">Skor</span>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function selectTopic(topicId){
+  const topic = allTopicsFlat.find(t => t.topic_id === topicId);
+  if (!topic) return;
+  selectedTopicId = topicId;
+  isNewTopic = false;
+
+  document.getElementById("topics-editor-empty").style.display = "none";
+  document.getElementById("topics-editor-body").style.display = "block";
+  renderTopicsFormFields();
+  fillTopicsForm(topic);
+  document.getElementById("topics-editor-title").textContent = `Edit: ${topic.title || topic.topic_id}`;
+  document.getElementById("btn-delete-topic").style.display = "inline-flex";
+  renderTopicPreview(topic);
+  renderTopicsList();
+}
+
+function startNewTopic(){
+  selectedTopicId = null;
+  isNewTopic = true;
+
+  document.getElementById("topics-editor-empty").style.display = "none";
+  document.getElementById("topics-editor-body").style.display = "block";
+  renderTopicsFormFields();
+  fillTopicsForm(null);
+  document.getElementById("topics-editor-title").textContent = "Topik Baru";
+  document.getElementById("btn-delete-topic").style.display = "none";
+  renderTopicPreview(null);
+  renderTopicsList();
+}
+
+function renderTopicsList(){
+  const container = document.getElementById("topics-list");
+  const search = (document.getElementById("topics-search").value || "").trim().toLowerCase();
+  container.innerHTML = "";
+
+  const visible = allTopicsFlat.filter(t => {
+    if (!search) return true;
+    return (t.title || "").toLowerCase().includes(search) || (t.topic_id || "").toLowerCase().includes(search);
+  });
+
+  if (!visible.length) {
+    container.innerHTML = `<p class="items-tree-empty-hint">${allTopicsFlat.length ? "Tiada padanan carian." : 'Tiada topik lagi. Tekan "+ Tambah Topik Baru".'}</p>`;
+    return;
+  }
+
+  visible.forEach(topic => {
+    const node = document.createElement("div");
+    node.className = "items-tree-node";
+    if (selectedTopicId === topic.topic_id) node.classList.add("selected");
+    const swatch = document.createElement("span");
+    swatch.style.cssText = `width:10px;height:10px;border-radius:50%;background:${topic.accent_color || '#ff7a1a'};flex-shrink:0;`;
+    const labelSpan = document.createElement("span");
+    labelSpan.textContent = topic.title || topic.topic_id;
+    node.appendChild(swatch);
+    node.appendChild(labelSpan);
+    node.addEventListener("click", () => selectTopic(topic.topic_id));
+    container.appendChild(node);
+  });
+}
+
+async function loadTopicsList(){
+  const container = document.getElementById("topics-list");
+  container.innerHTML = `<p class="items-tree-empty-hint">Memuatkan…</p>`;
+  try {
+    allTopicsFlat = await window.Api.adminList("Topics");
+  } catch (err) {
+    container.innerHTML = `<p class="items-tree-empty-hint" style="color:var(--bad);">${err.message}</p>`;
+    return;
+  }
+  renderTopicsList();
+  if (!selectedTopicId && !isNewTopic) {
+    document.getElementById("topics-editor-empty").style.display = "block";
+    document.getElementById("topics-editor-body").style.display = "none";
+  }
+}
+
+document.getElementById("topics-search").addEventListener("input", () => renderTopicsList());
+document.getElementById("btn-add-topic").addEventListener("click", () => startNewTopic());
+
+document.getElementById("topics-editor-form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const payload = {};
+  topicsFieldConfig().forEach(f => {
+    const el = document.getElementById("topics-field-" + f.key);
+    if (el) payload[f.key] = el.value;
+  });
+  if (!payload.topic_id) {
+    window.showMsg("Sila isi ID Topik.", true);
+    return;
+  }
+  const newId = payload.topic_id;
+  try {
+    await window.Api.adminSave(window.passcode, "Topics", payload);
+    window.showMsg("Topik disimpan.");
+    await loadTopicsList();
+    selectTopic(newId);
+  } catch (err) {
+    window.showMsg(err.message, true);
+  }
+});
+
+document.getElementById("btn-delete-topic").addEventListener("click", async () => {
+  if (!selectedTopicId) return;
+  if (!confirm("Padam topik ini? (Item/Sub-item/Soalan di bawahnya TIDAK dipadam automatik - urus berasingan kalau perlu.)")) return;
+  try {
+    await window.Api.adminDelete(window.passcode, "Topics", selectedTopicId);
+    window.showMsg("Dipadam.");
+    selectedTopicId = null;
+    isNewTopic = false;
+    renderTopicPreview(null);
+    await loadTopicsList();
+    document.getElementById("topics-editor-empty").style.display = "block";
+    document.getElementById("topics-editor-body").style.display = "none";
+  } catch (err) {
+    window.showMsg(err.message, true);
+  }
+});
+
+// dipanggil dari skrip klasik (loadSheet) setiap kali tab Topics dibuka
+window.initTopicsCms = function(){
+  loadTopicsList();
 };
 </script>
 </body>
