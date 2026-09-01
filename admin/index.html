@@ -645,7 +645,12 @@ function renderItemsFormFields(){
 function fillItemsForm(item){
   itemsFieldConfig().forEach(f => {
     const el = document.getElementById("items-field-" + f.key);
-    if (el) el.value = item ? (item[f.key] || "") : "";
+    if (!el) return;
+    // BUG DIBAIKI: "item[f.key] || ''" salah bila nilai ialah 0 (cth
+    // target_index=0) - 0 dianggap "falsy" oleh JS, jadi terpadam jadi
+    // kosong walaupun 0 ialah nilai SAH. Semak undefined/null sahaja.
+    const val = item ? item[f.key] : undefined;
+    el.value = (val === undefined || val === null) ? "" : val;
   });
 }
 
@@ -925,7 +930,9 @@ function renderTopicsFormFields(){
 function fillTopicsForm(topic){
   topicsFieldConfig().forEach(f => {
     const el = document.getElementById("topics-field-" + f.key);
-    if (el) el.value = topic ? (topic[f.key] || "") : "";
+    if (!el) return;
+    const val = topic ? topic[f.key] : undefined;
+    el.value = (val === undefined || val === null) ? "" : val;
   });
 }
 
