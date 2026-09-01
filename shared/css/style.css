@@ -168,10 +168,10 @@ tr:hover td{background:var(--bg-3);}
 .admin-table-wrap{overflow-x:auto;background:var(--bg-2);border:1px solid var(--line);border-radius:var(--radius);}
 
 /* ===== Items CMS (master/detail + pokok boleh lipat) ===== */
-.items-cms-layout{display:grid;grid-template-columns:300px 1fr;gap:20px;align-items:start;}
+.items-cms-layout{display:grid;grid-template-columns:300px minmax(0, 1fr);gap:20px;align-items:start;}
 @media (max-width:900px){.items-cms-layout{grid-template-columns:1fr;}}
 
-.items-cms-left{background:var(--bg-2);border:1px solid var(--line);border-radius:var(--radius);padding:14px;}
+.items-cms-left{background:var(--bg-2);border:1px solid var(--line);border-radius:var(--radius);padding:14px;min-width:0;}
 .items-tree{max-height:60vh;overflow-y:auto;margin:12px 0;}
 .items-tree-topic-header{font-family:var(--display);text-transform:uppercase;font-size:11px;letter-spacing:.08em;color:var(--text-dim);padding:10px 4px 6px;border-top:1px solid var(--line);margin-top:6px;}
 .items-tree-topic-header:first-child{border-top:none;margin-top:0;}
@@ -183,10 +183,12 @@ tr:hover td{background:var(--bg-3);}
 .items-tree-toggle:hover{color:var(--arc);}
 .items-tree-empty-hint{font-size:11px;color:var(--text-dim);padding:8px 4px;}
 
-.items-cms-right{background:var(--bg-2);border:1px solid var(--line);border-radius:var(--radius);padding:18px;}
+.items-cms-right{background:var(--bg-2);border:1px solid var(--line);border-radius:var(--radius);padding:18px;min-width:0;overflow-wrap:break-word;}
 .items-cms-right h2{margin-top:0;}
-.items-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 16px;}
+.items-form-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 16px;}
 .items-form-grid .full-width{grid-column:1 / -1;}
+.items-form-grid > div{min-width:0;}
+.items-form-grid label{overflow-wrap:break-word;word-break:break-word;}
 @media (max-width:700px){.items-form-grid{grid-template-columns:1fr;}}
 .items-parent-badge{display:inline-block;font-size:10.5px;letter-spacing:.04em;color:var(--arc);background:rgba(255,122,26,.12);border:1px solid var(--arc);border-radius:20px;padding:4px 10px;margin-bottom:14px;}
 #items-preview-viewer{height:340px;background:radial-gradient(circle at 50% 35%, #232328 0%, #131316 75%);border:1px solid var(--line);border-radius:var(--radius);position:relative;margin-top:16px;overflow:hidden;}
