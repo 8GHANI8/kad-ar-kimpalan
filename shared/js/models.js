@@ -231,3 +231,6 @@ registerGLBModel("buildSMAWMachine", "assets/models/mesin_smaw.glb", 0.4);
 registerGLBModel("buildElectrodeHolder", "assets/models/electrode-holde.glb", 0.4);
 registerGLBModel("GroundClamp", "assets/models/bumi.glb", 0.2);
 registerGLBModel("WeldingCable", "assets/models/kabel.glb", 0.4);
+registerGLBModel("sudut_ok", "assets/models/1F-pos.glb", 0.4);
+registerGLBModel("sudut_no", "assets/models/sudut-ok.glb", 0.2);
+registerGLBModel("speed_L", "assets/models/sudut-ok-anim.glb", 0.4);
