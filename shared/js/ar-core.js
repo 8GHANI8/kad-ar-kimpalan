@@ -322,13 +322,6 @@ export function start3DViewer(container, item, { onHotspotClick } = {}){
     hotspotMeshes = built.hotspotMeshes;
     scene.add(group);
 
-    // DEBUG SEMENTARA: dedahkan objek model semasa terus ke window supaya
-    // boleh diperiksa LANGSUNG dalam Console (F12), tanpa bergantung pada
-    // logik masa/private API yang mungkin gagal senyap-senyap. Padam baris
-    // ini lepas siap debug.
-    window.debugGroup = group;
-    console.log("[ANIM DEBUG] group dimuat, ada mixer?", !!group.userData.mixer, "- anak objek:", group.children.map(c => c.name));
-
     // auto-fit kamera ikut saiz & pusat SEBENAR model (bukan andaikan model
     // sentiasa di (0,0,0) - model placeholder/glb kerap ada offset dalaman)
     const box = new THREE.Box3().setFromObject(group);
@@ -358,22 +351,24 @@ export function start3DViewer(container, item, { onHotspotClick } = {}){
   window.addEventListener("resize", onResize);
 
   renderer.setAnimationLoop(() => {
-    const t = clock.getElapsedTime();
+    // PENTING: clock.getElapsedTime() SEBENARNYA panggil getDelta() secara
+    // dalaman (untuk kemas kini jumlah masa terkumpul), jadi panggil KEDUA-
+    // DUA getElapsedTime() DAN getDelta() dalam bingkai yang sama (macam
+    // sebelum ini) buat panggilan getDelta() kedua ukur hampir 0 saat -
+    // masa antara DUA BARIS KOD ini, bukan masa sebenar sejak bingkai lepas!
+    // Ini punca SEBENAR animasi "beku" - mixer.update(dt) dipanggil setiap
+    // bingkai macam sepatutnya, tapi dt yang diterima hampir sifar setiap
+    // kali, jadi animasi maju secara hampir tak ketara walau ditonton
+    // berminit-minit. Betulkan dengan panggil getDelta() SEKALI sahaja,
+    // then baca .elapsedTime (sifat, bukan kaedah) utk masa terkumpul.
     const dt = clock.getDelta();
+    const t = clock.elapsedTime;
     if (group) {
       if (group.userData.idleSpin && !userInteracting && t > idleResumeAt) {
         group.rotation.y += group.userData.idleSpin * dt;
       }
       if (group.userData.flicker) group.userData.flicker.intensity = 1.1 + Math.sin(t*30)*0.15 + (Math.random()-0.5)*0.2;
       if (group.userData.mixer) group.userData.mixer.update(dt); // animasi .glb dari Blender (kalau ada)
-      // DEBUG SEMENTARA (versi ringkas, tanpa private API Three.js yang
-      // mungkin gagal senyap): log rotasi anak PERTAMA group setiap saat.
-      if (group.userData.mixer && Math.floor(t) !== Math.floor(t - dt) && group.children[0]) {
-        // NOTA: guna .quaternion (bukan .rotation) - Euler.toArray() ada
-        // elemen ke-4 berupa STRING ("XYZ" dsb) yang buat .toFixed() gagal
-        // (punca ralat sebelum ini). quaternion.toArray() semuanya nombor.
-        console.log("[ANIM DEBUG] t=", t.toFixed(1), "quaternion anak[0] (" + group.children[0].name + ") =", group.children[0].quaternion.toArray().map(v => v.toFixed(3)));
-      }
       // THREE.VideoTexture biasanya auto-kemaskini, tapi ini jaring
       // keselamatan murah tanpa risiko - pastikan tekstur sentiasa segar
       // semasa video sedang main.
