@@ -221,6 +221,7 @@ function registerGLBModel(name, path, scale){
 }
 
 // Contoh (padam "//" di depan bila kamu betul-betul ada fail .glb untuk item ini):
-registerGLBModel("buildSMAWMachine", "assets/models/mesin_smaw.glb", 1);
+// registerGLBModel("buildSMAWMachine", "assets/models/mesin-smaw.glb", 0.4);
+registerGLBModel("buildElectrodeHolder", "assets/models/pemegang-elektrod.glb", 1);
 
 
