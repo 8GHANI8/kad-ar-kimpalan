@@ -133,6 +133,18 @@ function buildVideoPlaneGroup(item){
   const plane = new THREE.Mesh(new THREE.PlaneGeometry(planeWidth, planeHeight), material);
   group.add(plane);
 
+  // Nisbah 16:9 di atas cuma ANDAIAN AWAL (sebelum video sempat dimuat).
+  // Bila metadata video sebenar sampai, kita tahu videoWidth/videoHeight
+  // sebenar (cth 9:16 utk potret) - laraskan plane.scale.y supaya bentuk
+  // sepadan dgn video sebenar, bukan sentiasa dipaksa jadi landskap 16:9
+  // (ini punca video potret nampak "gepeng"/stretched sebelum ini).
+  video.addEventListener("loadedmetadata", () => {
+    if (!video.videoWidth || !video.videoHeight) return;
+    const actualAspect = video.videoWidth / video.videoHeight; // lebar/tinggi sebenar
+    const desiredHeight = planeWidth / actualAspect;
+    plane.scale.y = desiredHeight / planeHeight;
+  }, { once: true });
+
   group.userData.isVideoPlane = true;
   group.userData.video = video;
   group.userData.videoTexture = texture;
@@ -259,7 +271,15 @@ function attachVideoPlayButton(container, video, style){
   btn.style.cssText = style || "position:absolute;bottom:80px;left:50%;transform:translateX(-50%);z-index:20;font-family:monospace;font-weight:600;font-size:13px;padding:10px 18px;background:#ff7a1a;color:#111;border:none;border-radius:24px;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.5);";
   container.appendChild(btn);
   btn.addEventListener("click", () => {
-    if (video.paused) { video.play(); btn.textContent = "⏸ JEDA"; }
+    if (video.paused) {
+      // Buka bunyi di sini sahaja (bukan lebih awal) - klik butang ini ialah
+      // "user gesture" yang browser perlukan sebelum benarkan main video
+      // BERBUNYI. Cuba nyahmute lebih awal (cth semasa video dicipta) akan
+      // disekat oleh dasar autoplay kebanyakan browser mobile.
+      video.muted = false;
+      video.play();
+      btn.textContent = "⏸ JEDA";
+    }
     else { video.pause(); btn.textContent = "▶ MAIN"; }
   });
   return btn;
