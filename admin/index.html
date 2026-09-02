@@ -68,6 +68,45 @@
       </div>
     </div>
 
+    <div class="panel" id="questions-cms-panel" style="display:none;">
+      <div class="items-cms-layout">
+        <div class="items-cms-left">
+          <label for="questions-search">Cari Soalan</label>
+          <input type="text" id="questions-search" placeholder="🔍 Taip soalan, topik, item...">
+          <label for="questions-topic-filter" style="margin-top:12px;">Tapis Topik</label>
+          <select id="questions-topic-filter"><option value="">— Semua Topik —</option></select>
+          <label for="questions-item-filter" style="margin-top:12px;">Tapis Item</label>
+          <select id="questions-item-filter"><option value="">— Semua Item —</option></select>
+          <div class="items-tree" id="questions-list" style="margin-top:12px;"></div>
+          <button type="button" class="btn block" id="btn-add-question">+ Tambah Soalan Baru</button>
+        </div>
+
+        <div class="items-cms-right">
+          <div id="questions-editor-empty" style="color:var(--text-dim);font-size:13px;padding:30px 0;text-align:center;">
+            Pilih soalan di sebelah kiri untuk edit, atau tekan "+ Tambah Soalan Baru".
+          </div>
+
+          <div id="questions-editor-body" style="display:none;">
+            <h2 id="questions-editor-title">Soalan Baru</h2>
+            <label for="questions-field-item_id">Item / Sub-item</label>
+            <select id="questions-field-item_id"></select>
+            <p style="font-size:10.5px;color:var(--text-dim);margin:-10px 0 14px;">Soalan ini akan muncul selepas pelajar jumpa &amp; sahkan item/sub-item ini dalam Kuiz.</p>
+            <form id="questions-editor-form">
+              <div class="items-form-grid" id="questions-form-fields"></div>
+            </form>
+            <p class="field-error" id="questions-validation-error"></p>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+              <button type="submit" form="questions-editor-form" class="btn">Simpan</button>
+              <button type="button" class="btn danger" id="btn-delete-question" style="display:none;">Padam</button>
+            </div>
+
+            <p style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--arc);margin:20px 0 10px;">Pratonton Kuiz (macam yang pelajar nampak)</p>
+            <div id="questions-preview-mount" style="background:var(--bg-3);border-radius:var(--radius);padding:20px;max-width:420px;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="panel" id="topics-cms-panel" style="display:none;">
       <div class="items-cms-layout">
         <div class="items-cms-left">
@@ -140,6 +179,27 @@
       </div>
     </div>
 
+    <div class="panel" id="scores-controls-panel" style="display:none;">
+      <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:16px;">
+        <div>
+          <label for="scores-search">Cari (nama/kelas/institusi/topik)</label>
+          <input type="text" id="scores-search" placeholder="🔍 Taip untuk cari...">
+        </div>
+        <div>
+          <label for="scores-topic-filter">Tapis Topik</label>
+          <select id="scores-topic-filter"><option value="">— Semua Topik —</option></select>
+        </div>
+        <div>
+          <label for="scores-sort">Susun</label>
+          <select id="scores-sort">
+            <option value="recent">Terbaru dahulu</option>
+            <option value="percentage">Peratus tertinggi dahulu</option>
+            <option value="nama">Nama (A-Z)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
     <div class="panel" id="table-panel">
       <h2 id="table-title">—</h2>
       <div class="admin-table-wrap">
@@ -202,8 +262,8 @@ const SHEET_CONFIGS = {
   ]},
   Questions: { fields: [
     { key:"question_id", label:"ID Soalan", type:"text", primary:true, auto:true },
-    { key:"item_id", label:"ID Item", type:"text" },
-    { key:"prompt", label:"Soalan", type:"textarea" },
+    { key:"item_id", label:"ID Item", type:"text", hiddenInCms:true },
+    { key:"prompt", label:"Soalan", type:"textarea", full:true },
     { key:"option_a", label:"Pilihan A", type:"text" },
     { key:"option_b", label:"Pilihan B", type:"text" },
     { key:"option_c", label:"Pilihan C", type:"text" },
@@ -226,6 +286,81 @@ window.SHEET_CONFIGS = SHEET_CONFIGS;
 window.passcode = null;
 let currentSheet = "Topics";
 let editingId = null;
+let currentScoresRawRows = [];
+let scoresTopicsCache = null; // dicache - tak perlu tarik semula Topics setiap kali tapis/susun
+
+async function populateScoresTopicFilter(){
+  if (!scoresTopicsCache) {
+    try { scoresTopicsCache = await Api.adminList("Topics"); }
+    catch (err) { scoresTopicsCache = []; }
+  }
+  const sel = document.getElementById("scores-topic-filter");
+  const current = sel.value;
+  sel.innerHTML = `<option value="">— Semua Topik —</option>`;
+  scoresTopicsCache.forEach(t => {
+    const opt = document.createElement("option");
+    opt.value = t.topic_id;
+    opt.textContent = t.title || t.topic_id;
+    sel.appendChild(opt);
+  });
+  sel.value = current;
+}
+
+function renderScoresTable(){
+  const cfg = SHEET_CONFIGS.Scores;
+  const head = document.getElementById("table-head");
+  const body = document.getElementById("table-body");
+  document.getElementById("table-title").textContent = "Scores";
+
+  const search = (document.getElementById("scores-search").value || "").trim().toLowerCase();
+  const topicFilter = document.getElementById("scores-topic-filter").value;
+  const sortBy = document.getElementById("scores-sort").value;
+
+  let rows = currentScoresRawRows.filter(r => {
+    if (topicFilter && r.topic_id !== topicFilter) return false;
+    if (search) {
+      const hay = `${r.nama || ""} ${r.kelas || ""} ${r.institusi || ""} ${r.topic_id || ""}`.toLowerCase();
+      if (!hay.includes(search)) return false;
+    }
+    return true;
+  });
+
+  rows = rows.slice().sort((a, b) => {
+    if (sortBy === "percentage") return (Number(b.percentage) || 0) - (Number(a.percentage) || 0);
+    if (sortBy === "nama") return String(a.nama || "").localeCompare(String(b.nama || ""));
+    return new Date(b.timestamp || 0) - new Date(a.timestamp || 0); // "recent" (lalai)
+  });
+
+  head.innerHTML = "";
+  const trh = document.createElement("tr");
+  cfg.fields.forEach(f => {
+    const th = document.createElement("th");
+    th.textContent = f.label;
+    trh.appendChild(th);
+  });
+  head.appendChild(trh);
+
+  body.innerHTML = "";
+  if (!rows.length) {
+    body.innerHTML = `<tr><td colspan="${cfg.fields.length}" style="color:var(--text-dim);">${currentScoresRawRows.length ? "Tiada padanan carian/tapisan." : "Tiada rekod skor lagi."}</td></tr>`;
+    return;
+  }
+  rows.forEach(row => {
+    const tr = document.createElement("tr");
+    cfg.fields.forEach(f => {
+      const td = document.createElement("td");
+      const val = row[f.key];
+      td.textContent = (val === undefined || val === null) ? "" : val;
+      tr.appendChild(td);
+    });
+    body.appendChild(tr);
+  });
+}
+
+document.getElementById("scores-search").addEventListener("input", () => renderScoresTable());
+document.getElementById("scores-topic-filter").addEventListener("change", () => renderScoresTable());
+document.getElementById("scores-sort").addEventListener("change", () => renderScoresTable());
+
 
 document.getElementById("btn-unlock").addEventListener("click", () => {
   const val = document.getElementById("passcode-input").value.trim();
@@ -338,10 +473,15 @@ async function loadSheet(){
 
   const isItems = currentSheet === "Items";
   const isTopics = currentSheet === "Topics";
+  const isQuestions = currentSheet === "Questions";
+  const isScores = currentSheet === "Scores";
   document.getElementById("items-cms-panel").style.display = isItems ? "block" : "none";
   document.getElementById("topics-cms-panel").style.display = isTopics ? "block" : "none";
-  document.getElementById("table-panel").style.display = (isItems || isTopics) ? "none" : "block";
-  document.getElementById("form-panel").style.display = (isItems || isTopics) ? "none" : (cfg.readOnly ? "none" : "block");
+  document.getElementById("questions-cms-panel").style.display = isQuestions ? "block" : "none";
+  document.getElementById("scores-controls-panel").style.display = isScores ? "block" : "none";
+  const anyCms = isItems || isTopics || isQuestions;
+  document.getElementById("table-panel").style.display = anyCms ? "none" : "block";
+  document.getElementById("form-panel").style.display = anyCms ? "none" : (cfg.readOnly ? "none" : "block");
   if (isItems) {
     if (window.initItemsCms) window.initItemsCms();
     return; // Items diurus sepenuhnya oleh CMS module - tak guna jadual generik lagi
@@ -349,6 +489,10 @@ async function loadSheet(){
   if (isTopics) {
     if (window.initTopicsCms) window.initTopicsCms();
     return; // Topics diurus sepenuhnya oleh CMS module - tak guna jadual generik lagi
+  }
+  if (isQuestions) {
+    if (window.initQuestionsCms) window.initQuestionsCms();
+    return; // Questions diurus sepenuhnya oleh CMS module - tak guna jadual generik lagi
   }
 
   document.getElementById("table-title").textContent = currentSheet;
@@ -360,6 +504,14 @@ async function loadSheet(){
 
   try {
     const rows = await Api.adminList(currentSheet);
+
+    if (isScores) {
+      currentScoresRawRows = rows;
+      await populateScoresTopicFilter();
+      renderScoresTable();
+      return;
+    }
+
     const trh = document.createElement("tr");
     cfg.fields.forEach(f => {
       const th = document.createElement("th");
@@ -1079,6 +1231,329 @@ document.getElementById("btn-delete-topic").addEventListener("click", async () =
 // dipanggil dari skrip klasik (loadSheet) setiap kali tab Topics dibuka
 window.initTopicsCms = function(){
   loadTopicsList();
+};
+
+// ============================================================================
+// QUESTIONS CMS - cari + tapis Topik/Item + senarai padat + editor +
+// pratonton kuiz LANGSUNG (guna kelas .mcq-box/.mcq-option sedia ada -
+// bukan sistem kuiz kedua, cuma paparan semula gaya yang sama).
+// ============================================================================
+let allQuestionsFlat = [];
+let allQuestionsItemsFlat = [];
+let allQuestionsTopicsFlat = [];
+let selectedQuestionId = null;
+let isNewQuestion = false;
+
+function questionsFieldConfig(){ return window.SHEET_CONFIGS.Questions.fields; }
+
+// Topic + Item + Sub-item -> satu label bacaan manusia, cth:
+// "Welding Parameters / Sudut Elektrod / Sudut Baik"
+function resolveItemLabel(itemId){
+  if (!itemId) return "(tiada item dikaitkan)";
+  const item = allQuestionsItemsFlat.find(i => i.item_id === itemId);
+  if (!item) return itemId;
+  const topic = allQuestionsTopicsFlat.find(t => t.topic_id === item.topic_id);
+  const topicTitle = topic ? (topic.title || topic.topic_id) : item.topic_id;
+  if (item.parent_item_id) {
+    const parent = allQuestionsItemsFlat.find(i => i.item_id === item.parent_item_id);
+    return `${topicTitle} / ${parent ? (parent.title || parent.item_id) : item.parent_item_id} / ${item.title || item.item_id}`;
+  }
+  return `${topicTitle} / ${item.title || item.item_id}`;
+}
+
+// Dropdown "Item / Sub-item" dalam borang editor - disusun ikut Topik
+// (optgroup), sub-item diindent dengan "— " supaya hierarki jelas kelihatan.
+function populateItemPicker(selectEl, currentValue){
+  selectEl.innerHTML = `<option value="">— pilih item/sub-item —</option>`;
+  const byTopic = {};
+  allQuestionsItemsFlat.filter(i => !i.parent_item_id).forEach(item => {
+    if (!byTopic[item.topic_id]) byTopic[item.topic_id] = [];
+    byTopic[item.topic_id].push(item);
+  });
+  Object.keys(byTopic).sort().forEach(topicId => {
+    const topic = allQuestionsTopicsFlat.find(t => t.topic_id === topicId);
+    const grp = document.createElement("optgroup");
+    grp.label = topic ? (topic.title || topicId) : topicId;
+    byTopic[topicId].forEach(item => {
+      const opt = document.createElement("option");
+      opt.value = item.item_id;
+      opt.textContent = item.title || item.item_id;
+      grp.appendChild(opt);
+      allQuestionsItemsFlat.filter(c => c.parent_item_id === item.item_id).forEach(child => {
+        const copt = document.createElement("option");
+        copt.value = child.item_id;
+        copt.textContent = "— " + (child.title || child.item_id);
+        grp.appendChild(copt);
+      });
+    });
+    selectEl.appendChild(grp);
+  });
+  selectEl.value = currentValue || "";
+}
+
+function populateTopicFilter(){
+  const sel = document.getElementById("questions-topic-filter");
+  const current = sel.value;
+  sel.innerHTML = `<option value="">— Semua Topik —</option>`;
+  allQuestionsTopicsFlat.forEach(t => {
+    const opt = document.createElement("option");
+    opt.value = t.topic_id;
+    opt.textContent = t.title || t.topic_id;
+    sel.appendChild(opt);
+  });
+  sel.value = current;
+}
+
+function populateItemFilter(){
+  const sel = document.getElementById("questions-item-filter");
+  const current = sel.value;
+  const topicFilter = document.getElementById("questions-topic-filter").value;
+  sel.innerHTML = `<option value="">— Semua Item —</option>`;
+  allQuestionsItemsFlat
+    .filter(i => !topicFilter || i.topic_id === topicFilter)
+    .forEach(i => {
+      const opt = document.createElement("option");
+      opt.value = i.item_id;
+      opt.textContent = (i.parent_item_id ? "— " : "") + (i.title || i.item_id);
+      sel.appendChild(opt);
+    });
+  sel.value = current;
+}
+
+function renderQuestionsList(){
+  const container = document.getElementById("questions-list");
+  const search = (document.getElementById("questions-search").value || "").trim().toLowerCase();
+  const topicFilter = document.getElementById("questions-topic-filter").value;
+  const itemFilter = document.getElementById("questions-item-filter").value;
+  container.innerHTML = "";
+
+  const visible = allQuestionsFlat.filter(q => {
+    const item = allQuestionsItemsFlat.find(i => i.item_id === q.item_id);
+    const topicId = item ? item.topic_id : "";
+    if (topicFilter && topicId !== topicFilter) return false;
+    if (itemFilter && q.item_id !== itemFilter) return false;
+    if (search) {
+      const label = resolveItemLabel(q.item_id).toLowerCase();
+      const promptMatch = (q.prompt || "").toLowerCase().includes(search);
+      if (!promptMatch && !label.includes(search)) return false;
+    }
+    return true;
+  });
+
+  if (!visible.length) {
+    container.innerHTML = `<p class="items-tree-empty-hint">${allQuestionsFlat.length ? "Tiada padanan carian/tapisan." : "Tiada soalan lagi."}</p>`;
+    return;
+  }
+
+  visible.forEach(q => {
+    const node = document.createElement("div");
+    node.className = "items-tree-node";
+    node.style.alignItems = "flex-start";
+    if (selectedQuestionId === q.question_id) node.classList.add("selected");
+    const promptShort = (q.prompt || "(tiada teks soalan)").slice(0, 70) + ((q.prompt || "").length > 70 ? "…" : "");
+    const wrap = document.createElement("span");
+    wrap.style.cssText = "display:flex;flex-direction:column;gap:2px;";
+    const labelEl = document.createElement("span");
+    labelEl.style.cssText = "font-size:9.5px;color:var(--arc);text-transform:uppercase;letter-spacing:.04em;";
+    labelEl.textContent = resolveItemLabel(q.item_id);
+    const promptEl = document.createElement("span");
+    promptEl.textContent = promptShort;
+    wrap.appendChild(labelEl);
+    wrap.appendChild(promptEl);
+    node.appendChild(wrap);
+    node.addEventListener("click", () => selectQuestion(q.question_id));
+    container.appendChild(node);
+  });
+}
+
+function renderQuestionsFormFields(){
+  const grid = document.getElementById("questions-form-fields");
+  grid.innerHTML = "";
+  questionsFieldConfig().forEach(f => {
+    if (f.hiddenInCms) return;
+    const wrap = document.createElement("div");
+    if (f.full) wrap.className = "full-width";
+    const label = document.createElement("label");
+    label.textContent = f.label;
+    wrap.appendChild(label);
+    const input = f.type === "textarea" ? document.createElement("textarea") : document.createElement("input");
+    if (f.type !== "textarea") input.type = "text";
+    input.id = "questions-field-" + f.key;
+    if (f.primary && !isNewQuestion) input.disabled = true;
+    input.addEventListener("input", renderQuestionsPreview); // pratonton kemas kini LANGSUNG semasa taip
+    wrap.appendChild(input);
+    grid.appendChild(wrap);
+  });
+}
+
+function fillQuestionsForm(q){
+  questionsFieldConfig().forEach(f => {
+    if (f.hiddenInCms) return;
+    const el = document.getElementById("questions-field-" + f.key);
+    if (!el) return;
+    const val = q ? q[f.key] : undefined;
+    el.value = (val === undefined || val === null) ? "" : val;
+  });
+}
+
+function renderQuestionsPreview(){
+  const mount = document.getElementById("questions-preview-mount");
+  const promptEl = document.getElementById("questions-field-prompt");
+  if (!promptEl) return; // borang belum dirender lagi
+  const prompt = promptEl.value || "";
+  const correctKey = (document.getElementById("questions-field-correct_option").value || "").trim().toLowerCase();
+  const opts = [
+    ["a", document.getElementById("questions-field-option_a").value || ""],
+    ["b", document.getElementById("questions-field-option_b").value || ""],
+    ["c", document.getElementById("questions-field-option_c").value || ""],
+    ["d", document.getElementById("questions-field-option_d").value || ""]
+  ].filter(([, v]) => v);
+
+  if (!prompt && !opts.length) {
+    mount.innerHTML = `<p style="color:var(--text-dim);font-size:12px;margin:0;">Isi soalan &amp; pilihan untuk lihat pratonton.</p>`;
+    return;
+  }
+
+  mount.innerHTML = `
+    <div class="mcq-box">
+      <p class="eyebrow">Kuiz</p>
+      <h3>${prompt || "(soalan belum diisi)"}</h3>
+      ${opts.map(([key, label]) => `<div class="mcq-option${key === correctKey ? " correct" : ""}">${label}</div>`).join("")}
+    </div>
+  `;
+}
+
+function selectQuestion(qid){
+  const q = allQuestionsFlat.find(x => x.question_id === qid);
+  if (!q) return;
+  selectedQuestionId = qid;
+  isNewQuestion = false;
+
+  document.getElementById("questions-editor-empty").style.display = "none";
+  document.getElementById("questions-editor-body").style.display = "block";
+  renderQuestionsFormFields();
+  fillQuestionsForm(q);
+  populateItemPicker(document.getElementById("questions-field-item_id"), q.item_id);
+  document.getElementById("questions-editor-title").textContent = "Edit Soalan";
+  document.getElementById("btn-delete-question").style.display = "inline-flex";
+  document.getElementById("questions-validation-error").classList.remove("show");
+  renderQuestionsPreview();
+  renderQuestionsList();
+}
+
+function startNewQuestion(){
+  selectedQuestionId = null;
+  isNewQuestion = true;
+
+  document.getElementById("questions-editor-empty").style.display = "none";
+  document.getElementById("questions-editor-body").style.display = "block";
+  renderQuestionsFormFields();
+  fillQuestionsForm(null);
+  const presetItem = document.getElementById("questions-item-filter").value;
+  populateItemPicker(document.getElementById("questions-field-item_id"), presetItem);
+  document.getElementById("questions-editor-title").textContent = "Soalan Baru";
+  document.getElementById("btn-delete-question").style.display = "none";
+  document.getElementById("questions-validation-error").classList.remove("show");
+  renderQuestionsPreview();
+  renderQuestionsList();
+}
+
+async function loadQuestionsData(){
+  const container = document.getElementById("questions-list");
+  container.innerHTML = `<p class="items-tree-empty-hint">Memuatkan…</p>`;
+  try {
+    [allQuestionsFlat, allQuestionsItemsFlat, allQuestionsTopicsFlat] = await Promise.all([
+      window.Api.adminList("Questions"),
+      window.Api.adminList("Items"),
+      window.Api.adminList("Topics")
+    ]);
+  } catch (err) {
+    container.innerHTML = `<p class="items-tree-empty-hint" style="color:var(--bad);">${err.message}</p>`;
+    return;
+  }
+  populateTopicFilter();
+  populateItemFilter();
+  renderQuestionsList();
+  if (!selectedQuestionId && !isNewQuestion) {
+    document.getElementById("questions-editor-empty").style.display = "block";
+    document.getElementById("questions-editor-body").style.display = "none";
+  }
+}
+
+function validateQuestionPayload(payload){
+  if (!payload.item_id) return "Sila pilih Item/Sub-item.";
+  if (!payload.prompt || !payload.prompt.trim()) return "Sila isi teks soalan.";
+  const opts = [payload.option_a, payload.option_b, payload.option_c, payload.option_d];
+  if (opts.some(o => !o || !o.trim())) return "Sila isi KESEMUA 4 pilihan (A-D).";
+  const correct = (payload.correct_option || "").trim().toLowerCase();
+  if (!["a", "b", "c", "d"].includes(correct)) return 'Jawapan Betul mesti diisi "a", "b", "c" atau "d".';
+  return null;
+}
+
+document.getElementById("questions-search").addEventListener("input", () => renderQuestionsList());
+document.getElementById("questions-topic-filter").addEventListener("change", () => {
+  populateItemFilter();
+  renderQuestionsList();
+});
+document.getElementById("questions-item-filter").addEventListener("change", () => renderQuestionsList());
+document.getElementById("questions-field-item_id").addEventListener("change", renderQuestionsPreview);
+document.getElementById("btn-add-question").addEventListener("click", () => startNewQuestion());
+
+document.getElementById("questions-editor-form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const payload = {};
+  questionsFieldConfig().forEach(f => {
+    if (f.hiddenInCms) return;
+    const el = document.getElementById("questions-field-" + f.key);
+    if (el) payload[f.key] = el.value;
+  });
+  payload.item_id = document.getElementById("questions-field-item_id").value;
+  if (!isNewQuestion && selectedQuestionId) payload.question_id = selectedQuestionId;
+
+  const validationErr = validateQuestionPayload(payload);
+  const errEl = document.getElementById("questions-validation-error");
+  if (validationErr) {
+    errEl.textContent = validationErr;
+    errEl.classList.add("show");
+    return;
+  }
+  errEl.classList.remove("show");
+
+  try {
+    await window.Api.adminSave(window.passcode, "Questions", payload);
+    window.showMsg("Soalan disimpan.");
+    const wasNew = !payload.question_id;
+    await loadQuestionsData();
+    if (wasNew) {
+      const match = allQuestionsFlat.find(q => q.item_id === payload.item_id && q.prompt === payload.prompt);
+      if (match) selectQuestion(match.question_id);
+    } else {
+      selectQuestion(payload.question_id);
+    }
+  } catch (err) {
+    window.showMsg(err.message, true);
+  }
+});
+
+document.getElementById("btn-delete-question").addEventListener("click", async () => {
+  if (!selectedQuestionId) return;
+  if (!confirm("Padam soalan ini?")) return;
+  try {
+    await window.Api.adminDelete(window.passcode, "Questions", selectedQuestionId);
+    window.showMsg("Dipadam.");
+    selectedQuestionId = null;
+    isNewQuestion = false;
+    await loadQuestionsData();
+    document.getElementById("questions-editor-empty").style.display = "block";
+    document.getElementById("questions-editor-body").style.display = "none";
+  } catch (err) {
+    window.showMsg(err.message, true);
+  }
+});
+
+// dipanggil dari skrip klasik (loadSheet) setiap kali tab Questions dibuka
+window.initQuestionsCms = function(){
+  loadQuestionsData();
 };
 </script>
 </body>
