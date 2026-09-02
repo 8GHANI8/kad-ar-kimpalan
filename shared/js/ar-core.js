@@ -322,6 +322,13 @@ export function start3DViewer(container, item, { onHotspotClick } = {}){
     hotspotMeshes = built.hotspotMeshes;
     scene.add(group);
 
+    // DEBUG SEMENTARA: dedahkan objek model semasa terus ke window supaya
+    // boleh diperiksa LANGSUNG dalam Console (F12), tanpa bergantung pada
+    // logik masa/private API yang mungkin gagal senyap-senyap. Padam baris
+    // ini lepas siap debug.
+    window.debugGroup = group;
+    console.log("[ANIM DEBUG] group dimuat, ada mixer?", !!group.userData.mixer, "- anak objek:", group.children.map(c => c.name));
+
     // auto-fit kamera ikut saiz & pusat SEBENAR model (bukan andaikan model
     // sentiasa di (0,0,0) - model placeholder/glb kerap ada offset dalaman)
     const box = new THREE.Box3().setFromObject(group);
@@ -359,18 +366,10 @@ export function start3DViewer(container, item, { onHotspotClick } = {}){
       }
       if (group.userData.flicker) group.userData.flicker.intensity = 1.1 + Math.sin(t*30)*0.15 + (Math.random()-0.5)*0.2;
       if (group.userData.mixer) group.userData.mixer.update(dt); // animasi .glb dari Blender (kalau ada)
-      // DEBUG SEMENTARA: bukti secara langsung sama ada mixer betul-betul
-      // mengubah rotasi anak-objek animasi setiap bingkai. Log SEKALI sesaat
-      // sahaja (bukan setiap bingkai) supaya console tak dibanjiri. Cari anak
-      // objek animasi guna nama (tak semestinya "3DModel" - laraskan ikut
-      // apa yang kamu nampak dalam log). Padam blok ini lepas siap debug.
-      if (group.userData.mixer && Math.floor(t) !== Math.floor(t - dt)) {
-        const animatedChild = group.children.find(c => group.userData.mixer._actions.some(a => a._clip.tracks.some(tr => tr.name.startsWith(c.name))));
-        if (animatedChild) {
-          console.log("[ANIM DEBUG] rotation of", animatedChild.name, "=", animatedChild.rotation.toArray().map(v => v.toFixed(2)));
-        } else {
-          console.log("[ANIM DEBUG] tak jumpa objek anak yang dianimasikan dalam group.children:", group.children.map(c => c.name));
-        }
+      // DEBUG SEMENTARA (versi ringkas, tanpa private API Three.js yang
+      // mungkin gagal senyap): log rotasi anak PERTAMA group setiap saat.
+      if (group.userData.mixer && Math.floor(t) !== Math.floor(t - dt) && group.children[0]) {
+        console.log("[ANIM DEBUG] t=", t.toFixed(1), "rotation anak[0] (" + group.children[0].name + ") =", group.children[0].rotation.toArray().map(v => v.toFixed(2)));
       }
       // THREE.VideoTexture biasanya auto-kemaskini, tapi ini jaring
       // keselamatan murah tanpa risiko - pastikan tekstur sentiasa segar
