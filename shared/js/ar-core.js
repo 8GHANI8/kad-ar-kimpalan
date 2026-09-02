@@ -10,9 +10,19 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 
 window.THREE = THREE;       // models.js (script biasa) guna THREE global ini
 window.GLTFLoader = GLTFLoader; // models.js guna ini untuk load fail .glb sebenar
+
+// DRACOLoader: perlu untuk buka fail .glb yang dieksport dari Blender dengan
+// "Draco mesh compression" dihidupkan (elak ralat "No DRACOLoader instance
+// provided"). Decoder dimuat dari CDN unpkg (fail .wasm - tak perlu host
+// sendiri). Satu instance dikongsi untuk semua model_ref (models.js pasang
+// ini pada setiap GLTFLoader baru melalui window.dracoLoader).
+const dracoLoader = new DRACOLoader();
+dracoLoader.setDecoderPath("https://www.gstatic.com/draco/versioned/decoders/1.5.6/");
+window.dracoLoader = dracoLoader;
 
 // Asas laluan TETAP untuk fail .glb, dikira dari lokasi ar-core.js sendiri
 // (import.meta.url) - bukan dari halaman yang membukanya. Ini bermakna path

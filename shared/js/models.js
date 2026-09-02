@@ -199,6 +199,11 @@ registerModel("buildFilletJoint", (THREE) => {
 function registerGLBModel(name, path, scale){
   registerModel(name, async (THREE) => {
     const loader = new window.GLTFLoader();
+    // Pasang DRACOLoader (disediakan oleh ar-core.js) supaya fail .glb yang
+    // dieksport dengan Draco mesh compression boleh dibuka - tanpa ini,
+    // GLTFLoader akan gagal senyap-senyap dengan ralat "No DRACOLoader
+    // instance provided" dalam console bila model_ref itu guna Draco.
+    if (window.dracoLoader) loader.setDRACOLoader(window.dracoLoader);
     // path sentiasa diselesaikan berbanding folder shared/ (lihat
     // window.SHARED_BASE_URL dalam ar-core.js) - bukan berbanding halaman
     // semasa - supaya "assets/models/fail.glb" SENTIASA betul, tak kira
@@ -225,4 +230,3 @@ function registerGLBModel(name, path, scale){
 registerGLBModel("buildElectrodeHolder", "assets/models/electrode-holde.glb", 0.4);
 registerGLBModel("GroundClamp", "assets/models/bumi.glb", 0.4);
 registerGLBModel("WeldingCable", "assets/models/kabel.glb", 0.4);
-
