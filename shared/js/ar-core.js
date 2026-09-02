@@ -369,7 +369,10 @@ export function start3DViewer(container, item, { onHotspotClick } = {}){
       // DEBUG SEMENTARA (versi ringkas, tanpa private API Three.js yang
       // mungkin gagal senyap): log rotasi anak PERTAMA group setiap saat.
       if (group.userData.mixer && Math.floor(t) !== Math.floor(t - dt) && group.children[0]) {
-        console.log("[ANIM DEBUG] t=", t.toFixed(1), "rotation anak[0] (" + group.children[0].name + ") =", group.children[0].rotation.toArray().map(v => v.toFixed(2)));
+        // NOTA: guna .quaternion (bukan .rotation) - Euler.toArray() ada
+        // elemen ke-4 berupa STRING ("XYZ" dsb) yang buat .toFixed() gagal
+        // (punca ralat sebelum ini). quaternion.toArray() semuanya nombor.
+        console.log("[ANIM DEBUG] t=", t.toFixed(1), "quaternion anak[0] (" + group.children[0].name + ") =", group.children[0].quaternion.toArray().map(v => v.toFixed(3)));
       }
       // THREE.VideoTexture biasanya auto-kemaskini, tapi ini jaring
       // keselamatan murah tanpa risiko - pastikan tekstur sentiasa segar
