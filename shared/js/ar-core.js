@@ -31,6 +31,12 @@ window.dracoLoader = dracoLoader;
 // yang senang tersalah/tertinggal (isu yang berlaku sebelum ini).
 window.SHARED_BASE_URL = new URL("../", import.meta.url).href;
 
+// Sama macam SHARED_BASE_URL tapi SATU tingkat lagi ke atas - sampai ke akar
+// repo (bukan folder shared/). Video AR (ar_video_url) disimpan dalam
+// videos/ di akar repo (lihat README.txt dalamnya), BUKAN dalam shared/,
+// jadi ia perlukan asas laluan yang berbeza drpd model .glb.
+window.ROOT_BASE_URL = new URL("../../", import.meta.url).href;
+
 // Satu "unit" saiz penanda = 1 unit skala Three.js (bukan mm sebenar) -
 // ini elak keperluan ukur kad sebenar. MODEL_SCALE ialah default awal sahaja -
 // boleh dilaraskan LIVE guna slider dalam panel "Debug AR" (cubit skrin pun
@@ -101,7 +107,12 @@ export function itemHasVideo(item){ return !!(item && item.ar_video_url); }
 function buildVideoPlaneGroup(item){
   const group = new THREE.Group();
   const video = document.createElement("video");
-  video.src = item.ar_video_url;
+  // Selesaikan ar_video_url berbanding AKAR REPO (window.ROOT_BASE_URL), bukan
+  // berbanding halaman semasa (student/ atau admin/) - sebelum ini video.src
+  // diberi terus sebagai string relatif, jadi ia tersalah selesai kepada
+  // "student/videos/..." bila dibuka dari student/learn.html, walhal fail
+  // sebenar berada di "videos/..." pada akar repo. Ini punca ralat 404.
+  video.src = window.ROOT_BASE_URL ? new URL(item.ar_video_url, window.ROOT_BASE_URL).href : item.ar_video_url;
   video.crossOrigin = "anonymous";
   video.loop = true;
   video.muted = true;      // wajib utk mobile - main sebenar dikawal oleh butang ▶ kita sendiri
