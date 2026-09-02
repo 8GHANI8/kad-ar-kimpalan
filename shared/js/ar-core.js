@@ -359,6 +359,19 @@ export function start3DViewer(container, item, { onHotspotClick } = {}){
       }
       if (group.userData.flicker) group.userData.flicker.intensity = 1.1 + Math.sin(t*30)*0.15 + (Math.random()-0.5)*0.2;
       if (group.userData.mixer) group.userData.mixer.update(dt); // animasi .glb dari Blender (kalau ada)
+      // DEBUG SEMENTARA: bukti secara langsung sama ada mixer betul-betul
+      // mengubah rotasi anak-objek animasi setiap bingkai. Log SEKALI sesaat
+      // sahaja (bukan setiap bingkai) supaya console tak dibanjiri. Cari anak
+      // objek animasi guna nama (tak semestinya "3DModel" - laraskan ikut
+      // apa yang kamu nampak dalam log). Padam blok ini lepas siap debug.
+      if (group.userData.mixer && Math.floor(t) !== Math.floor(t - dt)) {
+        const animatedChild = group.children.find(c => group.userData.mixer._actions.some(a => a._clip.tracks.some(tr => tr.name.startsWith(c.name))));
+        if (animatedChild) {
+          console.log("[ANIM DEBUG] rotation of", animatedChild.name, "=", animatedChild.rotation.toArray().map(v => v.toFixed(2)));
+        } else {
+          console.log("[ANIM DEBUG] tak jumpa objek anak yang dianimasikan dalam group.children:", group.children.map(c => c.name));
+        }
+      }
       // THREE.VideoTexture biasanya auto-kemaskini, tapi ini jaring
       // keselamatan murah tanpa risiko - pastikan tekstur sentiasa segar
       // semasa video sedang main.
