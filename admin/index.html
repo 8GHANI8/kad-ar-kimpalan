@@ -33,37 +33,47 @@
 
     <div class="panel" id="hotspot-tool-panel" style="display:none;">
       <h2>🎯 Alat Letak Hotspot (Klik Terus Pada Model)</h2>
-      <label for="hs-item-select">Pilih Item</label>
-      <select id="hs-item-select"></select>
+      <div class="items-cms-layout">
+        <div class="items-cms-left">
+          <label for="hs-item-select">Pilih Item</label>
+          <select id="hs-item-select"></select>
+          <p style="font-size:10.5px;color:var(--text-dim);margin:10px 0 4px;text-transform:uppercase;letter-spacing:.06em;">Hotspot Untuk Item Ini</p>
+          <div class="items-tree" id="hs-hotspot-list">
+            <p class="items-tree-empty-hint">Pilih item di atas dahulu.</p>
+          </div>
+        </div>
 
-      <div id="hs-scale-row" style="display:none;margin-top:14px;">
-        <label for="hs-scale-slider">Skala Model (saiz OBJEK) — <span id="hs-scale-value">1.0x</span></label>
-        <input type="range" id="hs-scale-slider" min="0.1" max="5" step="0.1" value="1" style="width:100%;">
+        <div class="items-cms-right">
+          <div id="hs-scale-row" style="display:none;">
+            <label for="hs-scale-slider">Skala Model (saiz OBJEK) — <span id="hs-scale-value">1.0x</span></label>
+            <input type="range" id="hs-scale-slider" min="0.1" max="5" step="0.1" value="1" style="width:100%;">
 
-        <label for="hs-hotspot-scale-slider" style="margin-top:14px;">Saiz Hotspot (saiz TITIK PENANDA sahaja) — <span id="hs-hotspot-scale-value">1.0x</span></label>
-        <input type="range" id="hs-hotspot-scale-slider" min="0.3" max="4" step="0.1" value="1" style="width:100%;">
+            <label for="hs-hotspot-scale-slider" style="margin-top:14px;">Saiz Hotspot (saiz TITIK PENANDA sahaja) — <span id="hs-hotspot-scale-value">1.0x</span></label>
+            <input type="range" id="hs-hotspot-scale-slider" min="0.3" max="4" step="0.1" value="1" style="width:100%;">
 
-        <button type="button" class="btn ghost block" id="hs-scale-save-btn" style="margin-top:10px;">Simpan Skala Model + Saiz Hotspot</button>
-        <p style="font-size:10.5px;color:var(--text-dim);margin:4px 0 0;">Kedua-dua laras terus dalam pratonton di bawah — tekan butang di atas untuk tulis KEDUA-DUA nilai ke Sheet sekali gus (kalau tidak, ia reset bila kamu tinggalkan halaman).</p>
-      </div>
+            <button type="button" class="btn ghost block" id="hs-scale-save-btn" style="margin-top:10px;">Simpan Skala Model + Saiz Hotspot</button>
+            <p style="font-size:10.5px;color:var(--text-dim);margin:4px 0 0;">Kedua-dua laras terus dalam pratonton di bawah — tekan butang di atas untuk tulis KEDUA-DUA nilai ke Sheet sekali gus (kalau tidak, ia reset bila kamu tinggalkan halaman).</p>
+          </div>
 
-      <div id="hotspot-viewer" style="height:420px;background:#000;border:1px solid var(--line);border-radius:4px;position:relative;margin-top:14px;overflow:hidden;">
-        <p id="hs-viewer-placeholder" style="color:var(--text-dim);font-size:12px;padding:20px;margin:0;">Pilih item di atas untuk mula.</p>
-      </div>
-      <p style="font-size:11px;color:var(--text-dim);margin-top:10px;line-height:1.6;">
-        Seret untuk putar, cubit/scroll untuk zoom. <strong style="color:#f2f1ee;">Klik permukaan model</strong> untuk tambah hotspot baru (penanda <strong style="color:#ffcc00;">kuning</strong> = belum simpan). <strong style="color:#f2f1ee;">Klik penanda hijau</strong> sedia ada untuk edit/padam.
-      </p>
+          <div id="hotspot-viewer" style="height:420px;background:radial-gradient(circle at 50% 35%, #232328 0%, #131316 75%);border:1px solid var(--line);border-radius:var(--radius);position:relative;margin-top:14px;overflow:hidden;">
+            <p id="hs-viewer-placeholder" style="color:var(--text-dim);font-size:12px;padding:20px;margin:0;">Pilih item di atas untuk mula.</p>
+          </div>
+          <p style="font-size:11px;color:var(--text-dim);margin-top:10px;line-height:1.6;">
+            Seret untuk putar, cubit/scroll untuk zoom. <strong style="color:#f2f1ee;">Klik permukaan model</strong> untuk tambah hotspot baru (penanda <strong style="color:#ffcc00;">kuning</strong> = belum simpan). <strong style="color:#f2f1ee;">Klik penanda hijau</strong> sedia ada, atau klik senarai di kiri, untuk edit/padam.
+          </p>
 
-      <div id="hs-inline-form" style="display:none;margin-top:16px;padding-top:16px;border-top:1px solid var(--line);">
-        <h2 id="hs-inline-title" style="margin-bottom:10px;">Hotspot Baru</h2>
-        <label for="hs-label">Label</label>
-        <input type="text" id="hs-label" placeholder="cth: Dial Arus">
-        <label for="hs-info">Maklumat</label>
-        <textarea id="hs-info" placeholder="Penerangan pendek bahagian ini"></textarea>
-        <div style="display:flex;gap:10px;">
-          <button type="button" class="btn" id="hs-save-btn">Simpan</button>
-          <button type="button" class="btn danger" id="hs-delete-btn" style="display:none;">Padam</button>
-          <button type="button" class="btn ghost" id="hs-cancel-btn">Batal</button>
+          <div id="hs-inline-form" style="display:none;margin-top:16px;padding-top:16px;border-top:1px solid var(--line);">
+            <h2 id="hs-inline-title" style="margin-bottom:10px;">Hotspot Baru</h2>
+            <label for="hs-label">Label</label>
+            <input type="text" id="hs-label" placeholder="cth: Dial Arus">
+            <label for="hs-info">Maklumat</label>
+            <textarea id="hs-info" placeholder="Penerangan pendek bahagian ini"></textarea>
+            <div style="display:flex;gap:10px;">
+              <button type="button" class="btn" id="hs-save-btn">Simpan</button>
+              <button type="button" class="btn danger" id="hs-delete-btn" style="display:none;">Padam</button>
+              <button type="button" class="btn ghost" id="hs-cancel-btn">Batal</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -468,20 +478,24 @@ document.getElementById("data-form").addEventListener("submit", async (ev) => {
 
 async function loadSheet(){
   const cfg = SHEET_CONFIGS[currentSheet];
-  document.getElementById("hotspot-tool-panel").style.display = (currentSheet === "Hotspots") ? "block" : "none";
-  if (currentSheet === "Hotspots" && window.initHotspotTool) window.initHotspotTool();
 
   const isItems = currentSheet === "Items";
   const isTopics = currentSheet === "Topics";
   const isQuestions = currentSheet === "Questions";
   const isScores = currentSheet === "Scores";
+  const isHotspots = currentSheet === "Hotspots";
+  document.getElementById("hotspot-tool-panel").style.display = isHotspots ? "block" : "none";
   document.getElementById("items-cms-panel").style.display = isItems ? "block" : "none";
   document.getElementById("topics-cms-panel").style.display = isTopics ? "block" : "none";
   document.getElementById("questions-cms-panel").style.display = isQuestions ? "block" : "none";
   document.getElementById("scores-controls-panel").style.display = isScores ? "block" : "none";
-  const anyCms = isItems || isTopics || isQuestions;
+  const anyCms = isItems || isTopics || isQuestions || isHotspots;
   document.getElementById("table-panel").style.display = anyCms ? "none" : "block";
   document.getElementById("form-panel").style.display = anyCms ? "none" : (cfg.readOnly ? "none" : "block");
+  if (isHotspots) {
+    if (window.initHotspotTool) window.initHotspotTool();
+    return; // Hotspots diurus sepenuhnya oleh alat klik-letak - tak guna jadual generik lagi
+  }
   if (isItems) {
     if (window.initItemsCms) window.initItemsCms();
     return; // Items diurus sepenuhnya oleh CMS module - tak guna jadual generik lagi
@@ -612,6 +626,40 @@ let hotspotEditor = null;
 let currentEditorItem = null;
 let pendingPos = null;       // {x,y,z} - titik klik belum disimpan
 let editingHotspotId = null; // bila edit hotspot sedia ada (bukan tambah baru)
+let currentItemHotspots = []; // senarai hotspot item semasa - utk paparan senarai padat
+let selectedHotspotListId = null; // hotspot mana ditanda aktif dalam senarai
+
+function renderHotspotList(){
+  const container = document.getElementById("hs-hotspot-list");
+  container.innerHTML = "";
+  if (!currentEditorItem) {
+    container.innerHTML = `<p class="items-tree-empty-hint">Pilih item di atas dahulu.</p>`;
+    return;
+  }
+  if (!currentItemHotspots.length) {
+    container.innerHTML = `<p class="items-tree-empty-hint">Tiada hotspot lagi untuk item ini. Klik permukaan model di kanan untuk tambah.</p>`;
+    return;
+  }
+  currentItemHotspots.forEach(hs => {
+    const node = document.createElement("div");
+    node.className = "items-tree-node";
+    if (selectedHotspotListId === hs.hotspot_id) node.classList.add("selected");
+    node.textContent = hs.label || "(tiada label)";
+    node.addEventListener("click", () => selectHotspotFromList(hs));
+    container.appendChild(node);
+  });
+}
+
+// Klik entri dalam senarai = SAMA macam klik penanda hijau terus pada
+// model - dua cara pilih hotspot yang sama, senang mana-mana lebih mudah
+// bila hotspot dah banyak (sukar cari secara visual).
+function selectHotspotFromList(hs){
+  selectedHotspotListId = hs.hotspot_id;
+  editingHotspotId = hs.hotspot_id;
+  pendingPos = { x: Number(hs.pos_x) || 0, y: Number(hs.pos_y) || 0, z: Number(hs.pos_z) || 0 };
+  showInlineForm(hs, true);
+  renderHotspotList();
+}
 
 async function populateItemSelect(){
   const select = document.getElementById("hs-item-select");
@@ -638,21 +686,28 @@ async function loadHotspotEditorForItem(itemId){
   currentEditorItem = item;
   const allHotspots = await window.Api.adminList("Hotspots");
   const hotspots = allHotspots.filter(h => h.item_id === itemId);
+  currentItemHotspots = hotspots;
+  selectedHotspotListId = null;
+  renderHotspotList();
 
   if (hotspotEditor) hotspotEditor.stop();
   hideInlineForm();
 
   hotspotEditor = startHotspotEditor(document.getElementById("hotspot-viewer"), item, hotspots, {
     onSurfaceClick: (point) => {
+      selectedHotspotListId = null;
       pendingPos = point;
       editingHotspotId = null;
       hotspotEditor.setPendingMarker(point);
       showInlineForm({ label: "", info_text: "" }, false);
+      renderHotspotList();
     },
     onMarkerClick: (hotspot) => {
+      selectedHotspotListId = hotspot.hotspot_id;
       editingHotspotId = hotspot.hotspot_id;
       pendingPos = { x: Number(hotspot.pos_x) || 0, y: Number(hotspot.pos_y) || 0, z: Number(hotspot.pos_z) || 0 };
       showInlineForm(hotspot, true);
+      renderHotspotList();
     }
   });
 
@@ -714,6 +769,8 @@ function hideInlineForm(){
   if (hotspotEditor) hotspotEditor.clearPendingMarker();
   pendingPos = null;
   editingHotspotId = null;
+  selectedHotspotListId = null;
+  renderHotspotList();
 }
 
 document.getElementById("hs-cancel-btn").addEventListener("click", hideInlineForm);
@@ -721,7 +778,9 @@ document.getElementById("hs-cancel-btn").addEventListener("click", hideInlineFor
 async function refreshEditorMarkers(){
   if (!hotspotEditor || !currentEditorItem) return;
   const allHotspots = await window.Api.adminList("Hotspots");
-  hotspotEditor.refreshHotspots(allHotspots.filter(h => h.item_id === currentEditorItem.item_id));
+  currentItemHotspots = allHotspots.filter(h => h.item_id === currentEditorItem.item_id);
+  hotspotEditor.refreshHotspots(currentItemHotspots);
+  renderHotspotList();
 }
 
 document.getElementById("hs-save-btn").addEventListener("click", async () => {
