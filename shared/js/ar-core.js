@@ -288,13 +288,20 @@ function attachVideoPlayButton(container, video, style){
 export function start3DViewer(container, item, { onHotspotClick } = {}){
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  // PENTING: guna saiz KOTAK SEBENAR (container), bukan window.innerWidth/
+  // innerHeight. Fungsi ni asalnya dibina utk skrin penuh (student Learn),
+  // di mana container = seluruh viewport jadi kedua-duanya sama. Bila
+  // dipakai semula utk pratonton admin (kotak kecil terbenam), guna saiz
+  // window punca kanvas jadi SEBESAR SELURUH SKRIN lalu terpotong oleh
+  // sempadan kotak kecil - cuma sekelumit sudut kelihatan (bug yang
+  // dilaporkan). Guna clientWidth/clientHeight betul utk KEDUA-DUA kes.
+  renderer.setSize(container.clientWidth, container.clientHeight);
   container.innerHTML = "";
   container.appendChild(renderer.domElement);
   renderer.domElement.style.touchAction = "none"; // penting: elak browser 'curi' gesture drag/pinch
 
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.01, 100);
+  const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.01, 100);
   addLights(scene);
 
   const controls = new OrbitControls(camera, renderer.domElement);
@@ -344,9 +351,9 @@ export function start3DViewer(container, item, { onHotspotClick } = {}){
   renderer.domElement.addEventListener("touchend", onPointerDown, { passive: true });
 
   function onResize(){
-    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.aspect = container.clientWidth / container.clientHeight;
     camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setSize(container.clientWidth, container.clientHeight);
   }
   window.addEventListener("resize", onResize);
 
@@ -880,7 +887,16 @@ export async function startARViewer(container, topicId, items, {
       videoPlayBtn = fresh;
       videoPlayBtn.textContent = "▶ MAIN";
       videoPlayBtn.addEventListener("click", () => {
-        if (videoEl.paused) { videoEl.play(); videoPlayBtn.textContent = "⏸ JEDA"; }
+        if (videoEl.paused) {
+          // SAMA fix macam attachVideoPlayButton() - klik ni ialah "user
+          // gesture" browser perlukan sebelum benarkan bunyi main. Path
+          // KEDUA ini (bina semula butang bila tukar kad video) sebelum
+          // ini TERLUPA baris video.muted=false, jadi kad video ke-2/3
+          // dalam sesi yang sama kekal senyap selamanya - ini puncanya.
+          videoEl.muted = false;
+          videoEl.play();
+          videoPlayBtn.textContent = "⏸ JEDA";
+        }
         else { videoEl.pause(); videoPlayBtn.textContent = "▶ MAIN"; }
       });
     }
