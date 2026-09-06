@@ -293,8 +293,8 @@ export function start3DViewer(container, item, { onHotspotClick } = {}){
   // di mana container = seluruh viewport jadi kedua-duanya sama. Bila
   // dipakai semula utk pratonton admin (kotak kecil terbenam), guna saiz
   // window punca kanvas jadi SEBESAR SELURUH SKRIN lalu terpotong oleh
-  // sempadan kotak kecil - cuma sekelumit sudut kelihatan (bug yang
-  // dilaporkan). Guna clientWidth/clientHeight betul utk KEDUA-DUA kes.
+  // sempadan kotak kecil - cuma sekelumit sudut kelihatan (bug dilaporkan
+  // & dibaiki sebelum ini - jangan tulis balik ke window.innerWidth).
   renderer.setSize(container.clientWidth, container.clientHeight);
   container.innerHTML = "";
   container.appendChild(renderer.domElement);
@@ -887,16 +887,7 @@ export async function startARViewer(container, topicId, items, {
       videoPlayBtn = fresh;
       videoPlayBtn.textContent = "▶ MAIN";
       videoPlayBtn.addEventListener("click", () => {
-        if (videoEl.paused) {
-          // SAMA fix macam attachVideoPlayButton() - klik ni ialah "user
-          // gesture" browser perlukan sebelum benarkan bunyi main. Path
-          // KEDUA ini (bina semula butang bila tukar kad video) sebelum
-          // ini TERLUPA baris video.muted=false, jadi kad video ke-2/3
-          // dalam sesi yang sama kekal senyap selamanya - ini puncanya.
-          videoEl.muted = false;
-          videoEl.play();
-          videoPlayBtn.textContent = "⏸ JEDA";
-        }
+        if (videoEl.paused) { videoEl.muted = false; videoEl.play(); videoPlayBtn.textContent = "⏸ JEDA"; }
         else { videoEl.pause(); videoPlayBtn.textContent = "▶ MAIN"; }
       });
     }

@@ -213,12 +213,6 @@ function registerGLBModel(name, path, scale){
     const group = gltf.scene;
     group.scale.setScalar(scale !== undefined ? scale : 1);
 
-    // DEBUG SEMENTARA: check dalam DevTools > Console berapa banyak animasi
-    // sebenarnya sampai dari fail .glb ini. 0 = fail yang dimuat TIDAK ada
-    // animasi (fail lama/salah masih di server) - 1+ = animasi ada, masalah
-    // di tempat lain. Padam baris console.log ini selepas siap debug.
-    console.log(`[GLB] ${name}: ${gltf.animations ? gltf.animations.length : 0} animasi dijumpai dalam`, resolvedUrl);
-
     if (gltf.animations && gltf.animations.length){
       const mixer = new THREE.AnimationMixer(group);
       gltf.animations.forEach(clip => mixer.clipAction(clip).play());
@@ -240,4 +234,3 @@ registerGLBModel("WeldingCable", "assets/models/kabel.glb", 1);
 registerGLBModel("sudut_ok", "assets/models/1F-pos.glb", 1);
 registerGLBModel("sudut_no", "assets/models/sudut-ok.glb", 1);
 registerGLBModel("speed_L", "assets/models/sudut-ok-anim.glb", 1);
-
