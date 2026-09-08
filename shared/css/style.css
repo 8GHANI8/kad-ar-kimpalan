@@ -130,7 +130,10 @@ main footer.note{padding-left:0;padding-right:0;}
 /* ============================================================================
    VIEWER (learn.html / quiz.html) — immersive dark canvas, light glass chrome
 ============================================================================ */
-body.viewer{overflow:hidden;height:100vh;height:100dvh;background:#0c0d0f;}
+body.viewer{
+  overflow:hidden;height:100vh;height:100dvh;background:#0c0d0f;
+  --safe-bottom:max(16px, env(safe-area-inset-bottom, 0px) + 16px);
+}
 .viewer-wrap{position:relative;width:100vw;height:100vh;height:100dvh;background:#0c0d0f;}
 #stage,#ar-container{position:absolute;inset:0;}
 #stage{background:radial-gradient(circle at 50% 35%, #22252b 0%, #0c0d0f 75%);}
@@ -165,11 +168,11 @@ body.viewer{overflow:hidden;height:100vh;height:100dvh;background:#0c0d0f;}
 }
 
 .hud-status{
-  position:absolute;bottom:max(16px, env(safe-area-inset-bottom, 0px) + 16px);left:50%;transform:translateX(-50%);
+  position:absolute;bottom:var(--safe-bottom, 16px);left:50%;transform:translateX(-50%);
   font-size:12px;font-weight:600;color:#fff;
   background:rgba(17,18,21,.72);backdrop-filter:blur(14px);
   padding:9px 16px;border-radius:var(--radius-pill);z-index:5;display:flex;align-items:center;gap:8px;
-  text-align:center;box-shadow:var(--shadow-float);
+  text-align:center;box-shadow:var(--shadow-float);max-width:88vw;
 }
 .dot{width:7px;height:7px;border-radius:50%;background:var(--arc);animation:pulse 1.4s infinite ease-in-out;flex-shrink:0;}
 @keyframes pulse{0%,100%{opacity:.35;transform:scale(.85);}50%{opacity:1;transform:scale(1.15);}}
@@ -204,7 +207,9 @@ body.viewer{overflow:hidden;height:100vh;height:100dvh;background:#0c0d0f;}
 }
 
 .info-toggle-btn{
-  position:absolute;bottom:max(16px, env(safe-area-inset-bottom, 0px) + 16px);
+  position:absolute;
+  /* sits ABOVE the status pill, never behind/overlapping it */
+  bottom:calc(var(--safe-bottom, 16px) + 52px);
   z-index:5;font-family:var(--sans);font-weight:700;font-size:13px;
   padding:13px 20px;border-radius:var(--radius-pill);border:none;
   background:rgba(17,18,21,.72);backdrop-filter:blur(14px);color:#fff;cursor:pointer;
@@ -212,7 +217,7 @@ body.viewer{overflow:hidden;height:100vh;height:100dvh;background:#0c0d0f;}
 }
 .info-toggle-btn.active{background:var(--arc);color:#fff;}
 #btn-info{left:14px;right:14px;max-width:260px;margin:0 auto;}
-#btn-youtube{left:14px;right:14px;max-width:260px;margin:0 auto;bottom:calc(max(16px, env(safe-area-inset-bottom, 0px) + 16px) + 60px) !important;}
+#btn-youtube{left:14px;right:14px;max-width:260px;margin:0 auto;bottom:calc(var(--safe-bottom, 16px) + 108px) !important;}
 
 /* mode toggle lives as a small floating stack on the bottom-right, out of
    the way of the scrolling item picker up top */
@@ -227,21 +232,40 @@ body.viewer{overflow:hidden;height:100vh;height:100dvh;background:#0c0d0f;}
 }
 .mode-toggle button.active{background:var(--arc);color:#fff;}
 
-/* horizontal pill item picker (was a vertical list in the dark theme) */
-.item-picker{
-  position:absolute;top:74px;left:16px;right:16px;z-index:5;
-  display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;
-  -ms-overflow-style:none;scrollbar-width:none;
+/* single collapsible item selector: one pill button that opens a dropdown
+   list of every item (grouped under its parent when it has sub-items) */
+.item-select{position:absolute;top:74px;left:16px;right:16px;z-index:7;}
+.item-select-toggle{
+  width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;
+  font-family:var(--sans);font-weight:700;font-size:13.5px;text-align:left;
+  padding:12px 16px;border-radius:var(--radius-pill);border:none;
+  background:rgba(255,255,255,.94);backdrop-filter:blur(10px);color:var(--ink);cursor:pointer;
+  box-shadow:var(--shadow-sm);
 }
-.item-picker::-webkit-scrollbar{display:none;}
-.item-picker button{
-  font-family:var(--sans);font-weight:600;font-size:12.5px;white-space:nowrap;
-  padding:9px 16px;border-radius:var(--radius-pill);border:none;
-  background:rgba(255,255,255,.9);backdrop-filter:blur(10px);color:var(--ink-dim);cursor:pointer;
-  box-shadow:var(--shadow-sm);flex-shrink:0;
+.item-select-toggle #item-select-current{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.item-select-toggle .chev{flex-shrink:0;color:var(--arc-ink);transition:transform .18s ease;font-size:11px;}
+.item-select.open .item-select-toggle{border-radius:var(--radius-lg) var(--radius-lg) 0 0;box-shadow:var(--shadow-float);}
+.item-select.open .item-select-toggle .chev{transform:rotate(180deg);}
+
+.item-select-menu{
+  position:absolute;top:100%;left:0;right:0;
+  background:var(--surface);border-radius:0 0 var(--radius-lg) var(--radius-lg);
+  box-shadow:var(--shadow-float);max-height:min(52vh,420px);overflow-y:auto;
+  display:none;padding:6px 0;
 }
-.item-picker button.active{background:var(--arc);color:#fff;}
-.item-picker button.sub-item-btn{background:rgba(255,241,228,.95);color:var(--arc-ink);border:1px dashed var(--arc);}
+.item-select.open .item-select-menu{display:block;}
+.item-select-menu .group-label{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--ink-faint);padding:12px 18px 6px;
+}
+.item-select-menu .item-row{
+  display:block;width:100%;text-align:left;border:none;background:none;cursor:pointer;
+  font-family:var(--sans);font-size:14px;color:var(--ink);padding:11px 18px;
+}
+.item-select-menu .item-row:hover{background:var(--surface-2);}
+.item-select-menu .item-row.sub{padding-left:32px;color:var(--ink-dim);font-size:13.5px;}
+.item-select-menu .item-row.active{color:var(--arc-ink);font-weight:700;background:var(--arc-wash);}
+.item-select-menu .divider{border-top:1px solid var(--line);margin:6px 0;}
 
 .instruction-toast{
   position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;z-index:4;
