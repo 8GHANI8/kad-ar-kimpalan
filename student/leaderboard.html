@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Papan Pendahulu — Kad AR Kimpalan</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../shared/css/style.css">
 </head>
 <body>
@@ -47,7 +47,7 @@ async function boot(){
     const scores = await Api.getLeaderboard(topicId);
     document.getElementById("topic-title").textContent = topicId ? `Topik: ${topicId}` : "Semua Topik";
     if (!scores.length){
-      body.innerHTML = `<tr><td colspan="6" style="color:var(--text-dim);">Belum ada rekod skor lagi.</td></tr>`;
+      body.innerHTML = `<tr><td colspan="6" style="color:var(--ink-faint);">Belum ada rekod skor lagi.</td></tr>`;
       return;
     }
     scores.forEach((s, i) => {

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Belajar — Kad AR Kimpalan</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../shared/css/style.css">
 
 <script type="importmap">
@@ -29,9 +29,11 @@
   <div id="ar-container" style="display:none;"></div>
 
   <div class="hud-top">
+    <a class="back" href="index.html">← Senarai</a>
     <div class="title" id="hud-title">Memuatkan…</div>
-    <a class="back" href="index.html">← Senarai Topik</a>
   </div>
+
+  <div class="item-picker" id="item-picker"></div>
 
   <div class="mode-toggle">
     <button id="btn-3d" class="active">3D</button>
@@ -39,9 +41,7 @@
   </div>
 
   <button class="info-toggle-btn" id="btn-info">ℹ Keterangan</button>
-  <button class="info-toggle-btn" id="btn-youtube" style="display:none;top:140px;">▶ Video Penerangan</button>
-
-  <div class="item-picker" id="item-picker"></div>
+  <button class="info-toggle-btn" id="btn-youtube" style="display:none;">▶ Video Penerangan</button>
 
   <div class="hud-status" id="hud-status"><span class="dot"></span><span id="hud-status-text">Sedia</span></div>
 
