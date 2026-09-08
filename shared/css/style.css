@@ -206,21 +206,21 @@ body.viewer{
   .item-info-panel{left:20px;right:auto;}
 }
 
+/* video button: the one remaining labelled pill, sits just above the status
+   readout. The info ("i") button now lives as a plain circle in the
+   mode-toggle FAB stack instead, see below. */
 .info-toggle-btn{
   position:absolute;
-  /* sits ABOVE the status pill, never behind/overlapping it */
-  bottom:calc(var(--safe-bottom, 16px) + 52px);
+  bottom:calc(var(--safe-bottom, 16px) + 56px);
   z-index:5;font-family:var(--sans);font-weight:700;font-size:13px;
   padding:13px 20px;border-radius:var(--radius-pill);border:none;
   background:rgba(17,18,21,.72);backdrop-filter:blur(14px);color:#fff;cursor:pointer;
   box-shadow:var(--shadow-float);display:flex;align-items:center;gap:8px;
 }
 .info-toggle-btn.active{background:var(--arc);color:#fff;}
-#btn-info{left:14px;right:14px;max-width:260px;margin:0 auto;}
-#btn-youtube{left:14px;right:14px;max-width:260px;margin:0 auto;bottom:calc(var(--safe-bottom, 16px) + 108px) !important;}
+#btn-youtube{left:14px;right:14px;max-width:260px;margin:0 auto;}
 
-/* mode toggle lives as a small floating stack on the bottom-right, out of
-   the way of the scrolling item picker up top */
+/* FAB stack bottom-right: info (i) circle sits on top of the 3D/AR toggle */
 .mode-toggle{
   position:absolute;bottom:max(96px, env(safe-area-inset-bottom, 0px) + 96px);right:16px;z-index:5;
   display:flex;flex-direction:column;gap:8px;
@@ -231,12 +231,13 @@ body.viewer{
   box-shadow:var(--shadow-float);
 }
 .mode-toggle button.active{background:var(--arc);color:#fff;}
+.mode-toggle #btn-info{font-style:italic;font-size:16px;font-weight:800;}
 
-/* single collapsible item selector: one pill button that opens a dropdown
-   list of every item (grouped under its parent when it has sub-items) */
-.item-select{position:absolute;top:74px;left:16px;right:16px;z-index:7;}
+/* single collapsible item selector: a compact pill that opens a dropdown
+   list of every item, sized to its own content (not the full row) */
+.item-select{position:absolute;top:74px;left:16px;z-index:7;max-width:min(72vw,320px);}
 .item-select-toggle{
-  width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;
+  width:auto;max-width:100%;display:inline-flex;align-items:center;justify-content:space-between;gap:10px;
   font-family:var(--sans);font-weight:700;font-size:13.5px;text-align:left;
   padding:12px 16px;border-radius:var(--radius-pill);border:none;
   background:rgba(255,255,255,.94);backdrop-filter:blur(10px);color:var(--ink);cursor:pointer;
@@ -248,9 +249,9 @@ body.viewer{
 .item-select.open .item-select-toggle .chev{transform:rotate(180deg);}
 
 .item-select-menu{
-  position:absolute;top:100%;left:0;right:0;
-  background:var(--surface);border-radius:0 0 var(--radius-lg) var(--radius-lg);
-  box-shadow:var(--shadow-float);max-height:min(52vh,420px);overflow-y:auto;
+  position:absolute;top:100%;left:0;min-width:220px;max-width:min(80vw,340px);
+  background:var(--surface);border-radius:0 var(--radius-lg) var(--radius-lg) var(--radius-lg);
+  box-shadow:var(--shadow-float);max-height:min(52vh,420px);overflow-y:auto;overflow-x:hidden;
   display:none;padding:6px 0;
 }
 .item-select.open .item-select-menu{display:block;}
