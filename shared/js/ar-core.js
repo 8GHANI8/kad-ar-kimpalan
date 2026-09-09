@@ -63,15 +63,61 @@ function saveModelScale(v){
   localStorage.setItem("arModelScale", String(v));
 }
 
-export function addLights(scene){
-  const amb = new THREE.AmbientLight(0xffffff, 1.05);
+// ============================================================================
+// PENCAHAYAAN (BOLEH LARAS): admin boleh laras kecerahan paparan 3D/AR untuk
+// SEMUA pelajar sekali gus dari tab "Pencahayaan" (disimpan dalam Sheet
+// "Settings", satu baris sahaja - settings_id "global"). learn.html/quiz.html
+// tarik nilai ini sekali semasa boot() dan hantar sebagai {lighting} kepada
+// start3DViewer/startARViewer. Kalau Sheet belum ada lajur/baris ini lagi
+// (kit lama), DEFAULT_LIGHTING diguna - app tak pernah patah sebab tiada
+// tetapan pencahayaan.
+// ============================================================================
+export const DEFAULT_LIGHTING = {
+  ambient_intensity: 1.05,
+  direct_intensity: 1.0,
+  rim_intensity: 0.6,
+  exposure: 1.0,
+  bg_color: "#0c0d0f",
+  autorotate: true
+};
+
+export function mergeLighting(overrides){
+  const out = { ...DEFAULT_LIGHTING };
+  if (!overrides) return out;
+  ["ambient_intensity", "direct_intensity", "rim_intensity", "exposure"].forEach(k => {
+    const v = Number(overrides[k]);
+    if (!isNaN(v)) out[k] = v;
+  });
+  if (overrides.bg_color) out.bg_color = overrides.bg_color;
+  if (overrides.autorotate !== undefined && overrides.autorotate !== "") {
+    out.autorotate = !(overrides.autorotate === false || overrides.autorotate === "FALSE" || overrides.autorotate === "false" || overrides.autorotate === "0");
+  }
+  return out;
+}
+
+// Pulangkan RUJUKAN kepada ketiga-tiga lampu (bukan cuma tambah ke scene
+// senyap-senyap macam dahulu) - supaya panel Pencahayaan admin boleh laras
+// intensiti LIVE (setLighting()) tanpa perlu bina semula scene setiap kali
+// slider gerak.
+export function addLights(scene, lighting){
+  const cfg = lighting || DEFAULT_LIGHTING;
+  const amb = new THREE.AmbientLight(0xffffff, cfg.ambient_intensity);
   scene.add(amb);
-  const dir = new THREE.DirectionalLight(0xffffff, 1.0);
+  const dir = new THREE.DirectionalLight(0xffffff, cfg.direct_intensity);
   dir.position.set(1, 2, 1.5);
   scene.add(dir);
-  const rim = new THREE.DirectionalLight(0x88aaff, 0.6);
+  const rim = new THREE.DirectionalLight(0x88aaff, cfg.rim_intensity);
   rim.position.set(-1.5, 0.5, -1);
   scene.add(rim);
+  return { ambient: amb, main: dir, rim };
+}
+
+// Terap exposure (tone mapping) pada renderer - lapisan pencahayaan KEDUA,
+// berasingan dari intensiti lampu individu (sama macam gltf-viewer rujukan).
+export function applyExposure(renderer, lighting){
+  const cfg = lighting || DEFAULT_LIGHTING;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = Number(cfg.exposure) > 0 ? Number(cfg.exposure) : 1;
 }
 
 // hotspot marker bersaiz BERKADAR dengan saiz model (modelRadius) - dahulu
@@ -285,8 +331,14 @@ function attachVideoPlayButton(container, video, style){
   return btn;
 }
 
-export function start3DViewer(container, item, { onHotspotClick } = {}){
+export function start3DViewer(container, item, { onHotspotClick, lighting } = {}){
+  const lightingCfg = lighting || DEFAULT_LIGHTING;
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  applyExposure(renderer, lightingCfg);
+  // Warna latar tetapan admin - tulis terus pada KOTAK (bukan renderer, sebab
+  // renderer sengaja "alpha:true"/telus supaya gradient CSS #stage boleh
+  // kelihatan). Tulis di sini bermakna ia MENGATASI gradient CSS lalai.
+  if (lightingCfg.bg_color) container.style.background = lightingCfg.bg_color;
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   // PENTING: guna saiz KOTAK SEBENAR (container), bukan window.innerWidth/
   // innerHeight. Fungsi ni asalnya dibina utk skrin penuh (student Learn),
@@ -302,7 +354,7 @@ export function start3DViewer(container, item, { onHotspotClick } = {}){
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.01, 100);
-  addLights(scene);
+  addLights(scene, lightingCfg);
 
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
@@ -371,7 +423,7 @@ export function start3DViewer(container, item, { onHotspotClick } = {}){
     const dt = clock.getDelta();
     const t = clock.elapsedTime;
     if (group) {
-      if (group.userData.idleSpin && !userInteracting && t > idleResumeAt) {
+      if (group.userData.idleSpin && lightingCfg.autorotate && !userInteracting && t > idleResumeAt) {
         group.rotation.y += group.userData.idleSpin * dt;
       }
       if (group.userData.flicker) group.userData.flicker.intensity = 1.1 + Math.sin(t*30)*0.15 + (Math.random()-0.5)*0.2;
@@ -405,8 +457,11 @@ export function start3DViewer(container, item, { onHotspotClick } = {}){
 // terbenam (bukan skrin penuh), model STATIK (tiada idle-spin, supaya senang
 // nak klik tepat), papar penanda hotspot sedia ada (hijau) + satu penanda
 // "belum simpan" (kuning) bila admin klik permukaan model baru.
-export function startHotspotEditor(container, item, hotspots, { onSurfaceClick, onMarkerClick } = {}){
+export function startHotspotEditor(container, item, hotspots, { onSurfaceClick, onMarkerClick, lighting } = {}){
+  let lightingCfg = lighting || DEFAULT_LIGHTING;
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  applyExposure(renderer, lightingCfg);
+  if (lightingCfg.bg_color) container.style.background = lightingCfg.bg_color;
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(container.clientWidth, container.clientHeight);
   container.innerHTML = "";
@@ -415,7 +470,7 @@ export function startHotspotEditor(container, item, hotspots, { onSurfaceClick, 
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.01, 100);
-  addLights(scene);
+  const lights = addLights(scene, lightingCfg);
 
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
@@ -539,6 +594,17 @@ export function startHotspotEditor(container, item, hotspots, { onSurfaceClick, 
       if (marker) group.remove(marker);
     },
     refreshHotspots(list){ renderHotspotMarkers(list); },
+    // dipanggil oleh tab "Pencahayaan" admin - laras SEMUA parameter cahaya
+    // LIVE dalam pratonton ini (slider -> kesan serta-merta, tak perlu
+    // simpan/reload). Terima objek SEBAHAGIAN (cuma kunci yang berubah).
+    setLighting(partial){
+      lightingCfg = { ...lightingCfg, ...partial };
+      lights.ambient.intensity = lightingCfg.ambient_intensity;
+      lights.main.intensity = lightingCfg.direct_intensity;
+      lights.rim.intensity = lightingCfg.rim_intensity;
+      applyExposure(renderer, lightingCfg);
+      if (lightingCfg.bg_color) container.style.background = lightingCfg.bg_color;
+    },
     // dipanggil oleh slider "Skala Model" dalam admin - laras saiz model
     // SECARA LANGSUNG dalam pratonton (tak simpan - admin perlu tekan
     // Simpan Skala secara berasingan untuk tulis ke Sheet).
@@ -674,8 +740,10 @@ export async function startARViewer(container, topicId, items, {
   onTargetFound,   // (item) => void
   onTargetLost,    // (item) => void
   onHotspotClick,  // (hit) => void
-  onError          // (err) => void
+  onError,         // (err) => void
+  lighting         // tetapan Pencahayaan dari admin (Sheet "Settings")
 } = {}){
+  const lightingCfg = lighting || DEFAULT_LIGHTING;
   if (typeof AR === "undefined" || typeof POS === "undefined") {
     onError && onError(new Error("js-aruco2 tidak dimuat (semak <script> tags dalam <head>)"));
     return null;
@@ -716,6 +784,7 @@ export async function startARViewer(container, topicId, items, {
   container.appendChild(glCanvas);
 
   const renderer = new THREE.WebGLRenderer({ canvas: glCanvas, antialias: true, alpha: true });
+  applyExposure(renderer, lightingCfg);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
 
@@ -724,7 +793,7 @@ export async function startARViewer(container, topicId, items, {
   const camera = new THREE.PerspectiveCamera(vFov, dw/dh, 0.01, 100);
 
   const scene = new THREE.Scene();
-  addLights(scene);
+  addLights(scene, lightingCfg);
 
   const detector = new AR.Detector({ dictionaryName: "ARUCO" });
   const posit = new POS.Posit(MARKER_UNIT_SIZE, dw);

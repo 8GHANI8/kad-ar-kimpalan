@@ -33,6 +33,10 @@ const Api = {
   getTopicBundle(topicId) { return this.get("topicBundle", { topic: topicId }); },
   getLeaderboard(topicId) { return this.get("leaderboard", topicId ? { topic: topicId } : {}); },
   adminList(sheet) { return this.get("adminList", { sheet }); },
+  // Tetapan Pencahayaan global (Sheet "Settings", satu baris "global") -
+  // pulangkan SENARAI (biasanya 0 atau 1 baris) supaya konsisten dengan
+  // adminList/getTopics; caller ambil baris pertama (kalau ada).
+  getSettings() { return this.get("settings"); },
 
   submitScore(payload) { return this.post({ action: "submitScore", payload }); },
   adminSave(passcode, sheet, payload) { return this.post({ action: "adminSave", passcode, sheet, payload }); },
