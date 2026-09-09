@@ -166,6 +166,11 @@ body.viewer{
   background:rgba(255,255,255,.9);backdrop-filter:blur(10px);
   padding:9px 14px;border-radius:var(--radius-pill);box-shadow:var(--shadow-sm);
 }
+/* Mod 3D: sorok pill tajuk kanan-atas - item-select (pill kolaps bawah
+   "← Senarai") dah papar NAMA ITEM YANG SAMA, jadi dua pill bertindan
+   cuma berulang tanpa tambah maklumat. Mod AR kekal papar pill ini
+   (item-select disorok dalam Mod AR - kad fizikal yang tentukan item). */
+.viewer-wrap.mode-3d .hud-top .title{display:none;}
 
 .hud-status{
   position:absolute;bottom:var(--safe-bottom, 16px);left:50%;transform:translateX(-50%);
@@ -206,21 +211,11 @@ body.viewer{
   .item-info-panel{left:20px;right:auto;}
 }
 
-/* video button: the one remaining labelled pill, sits just above the status
-   readout. The info ("i") button now lives as a plain circle in the
-   mode-toggle FAB stack instead, see below. */
-.info-toggle-btn{
-  position:absolute;
-  bottom:calc(var(--safe-bottom, 16px) + 56px);
-  z-index:5;font-family:var(--sans);font-weight:700;font-size:13px;
-  padding:13px 20px;border-radius:var(--radius-pill);border:none;
-  background:rgba(17,18,21,.72);backdrop-filter:blur(14px);color:#fff;cursor:pointer;
-  box-shadow:var(--shadow-float);display:flex;align-items:center;gap:8px;
-}
-.info-toggle-btn.active{background:var(--arc);color:#fff;}
-#btn-youtube{left:14px;right:14px;max-width:260px;margin:0 auto;}
-
-/* FAB stack bottom-right: info (i) circle sits on top of the 3D/AR toggle */
+/* FAB stack bottom-right: info (i) circle sits on top of the 3D/AR toggle.
+   btn-youtube ("Video Penerangan") now lives IN this same stack, right below
+   the AR circle - it used to be a separate labelled pill lower on screen,
+   which the dynamic ▶ MAIN/JEDA video button (added by ar-core.js) would
+   collide with. Styled as a plain round YouTube-red play icon, not text. */
 .mode-toggle{
   position:absolute;bottom:max(96px, env(safe-area-inset-bottom, 0px) + 96px);right:16px;z-index:5;
   display:flex;flex-direction:column;gap:8px;
@@ -229,9 +224,12 @@ body.viewer{
   font-family:var(--sans);font-weight:700;font-size:12px;width:46px;height:46px;border-radius:50%;
   border:none;background:rgba(255,255,255,.92);backdrop-filter:blur(10px);color:var(--ink-dim);cursor:pointer;
   box-shadow:var(--shadow-float);
+  display:flex;align-items:center;justify-content:center;
 }
 .mode-toggle button.active{background:var(--arc);color:#fff;}
 .mode-toggle #btn-info{font-style:italic;font-size:16px;font-weight:800;}
+.mode-toggle #btn-youtube{background:#ff0000;color:#fff;}
+.mode-toggle #btn-youtube svg{margin-left:2px;} /* optik: segitiga ▶ nampak lebih "tengah" sedikit ke kanan */
 
 /* single collapsible item selector: a compact pill that opens a dropdown
    list of every item, sized to its own content (not the full row) */
