@@ -104,10 +104,11 @@
 <script src="../shared/js/api.js"></script>
 <script src="../shared/js/models.js"></script>
 <script type="module">
-import { startARViewer, flattenLeafItems } from "../shared/js/ar-core.js";
+import { startARViewer, flattenLeafItems, DEFAULT_LIGHTING, mergeLighting } from "../shared/js/ar-core.js";
 
 const params = new URLSearchParams(location.search);
 const topicId = params.get("topic");
+let lightingCfg = DEFAULT_LIGHTING;
 
 const screenIdentify = document.getElementById("screen-identify");
 const screenIntro = document.getElementById("screen-intro");
@@ -176,6 +177,7 @@ async function startQuizSession(){
   arSession = await startARViewer(document.getElementById("ar-container"), topicId, leafItems, {
     onTargetFound: (item) => { visibleItemIds.add(item.item_id); updateConfirmState(); },
     onTargetLost: (item) => { visibleItemIds.delete(item.item_id); updateConfirmState(); },
+    lighting: lightingCfg,
     onError: (err) => {
       console.error(err);
       hudStatusText.textContent = "AR gagal dimuat — semak kebenaran kamera & sambungan internet";
@@ -315,6 +317,12 @@ async function boot(){
   if (!topicId || !apiConfigured()){
     document.getElementById("identify-topic-title").textContent = "Ralat konfigurasi";
     return;
+  }
+  try {
+    const settingsRows = await Api.getSettings();
+    lightingCfg = mergeLighting(settingsRows && settingsRows[0]);
+  } catch (err) {
+    lightingCfg = DEFAULT_LIGHTING;
   }
   try {
     bundle = await Api.getTopicBundle(topicId);

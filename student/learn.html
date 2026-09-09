@@ -30,9 +30,17 @@
 
   <div class="hud-top">
     <a class="back" href="index.html">← Senarai</a>
+    <!-- Pill ini cuma papar tajuk item semasa dalam Mod AR (di mana item
+         ditentukan oleh kad yang dikesan, bukan pilihan manual) - dalam Mod
+         3D ia disorokkan (lihat .viewer-wrap.mode-3d .hud-top .title dalam
+         style.css) sebab item-select di bawah dah papar nama yang SAMA -
+         dua pill bertindan menunjukkan info berulang tanpa sebab. -->
     <div class="title" id="hud-title">Memuatkan…</div>
   </div>
 
+  <!-- Satu pill kolaps sahaja, di bawah butang "← Senarai" - tekan untuk buka
+       senarai penuh item (cuma relevan dalam Mod 3D, disorok dalam Mod AR
+       sebab kad fizikal yang tentukan item, bukan pilihan manual). -->
   <div class="item-select" id="item-select">
     <button class="item-select-toggle" id="item-select-toggle" type="button">
       <span id="item-select-current">Memuatkan…</span>
@@ -45,9 +53,14 @@
     <button id="btn-info" title="Keterangan">i</button>
     <button id="btn-3d" class="active">3D</button>
     <button id="btn-ar">AR</button>
+    <!-- Dipindah ke dalam susunan FAB ni (di bawah butang AR) supaya tak
+         bertindih dengan butang ▶ MAIN/JEDA video (yang dicipta oleh
+         ar-core.js di tengah-bawah skrin). Gaya bulatan merah macam ikon
+         YouTube - segitiga putih di tengah. -->
+    <button id="btn-youtube" class="youtube-btn" title="Video Penerangan" style="display:none;">
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
+    </button>
   </div>
-
-  <button class="info-toggle-btn" id="btn-youtube" style="display:none;">▶ Video Penerangan</button>
 
   <div class="hud-status" id="hud-status"><span class="dot"></span><span id="hud-status-text">Sedia</span></div>
 
@@ -76,10 +89,12 @@
 <script src="../shared/js/api.js"></script>
 <script src="../shared/js/models.js"></script>
 <script type="module">
-import { startARViewer, start3DViewer, flattenLeafItems, itemHasModel, itemHasVideo } from "../shared/js/ar-core.js";
+import { startARViewer, start3DViewer, flattenLeafItems, itemHasModel, itemHasVideo, DEFAULT_LIGHTING, mergeLighting } from "../shared/js/ar-core.js";
 
 const params = new URLSearchParams(location.search);
 const topicId = params.get("topic");
+const viewerWrap = document.querySelector(".viewer-wrap");
+let lightingCfg = DEFAULT_LIGHTING; // digantikan dengan tetapan admin sebaik boot() selesai tarik Settings
 
 const hudTitle = document.getElementById("hud-title");
 const hudStatusText = document.getElementById("hud-status-text");
@@ -110,7 +125,7 @@ btnYoutube.addEventListener("click", () => {
 // memang ada youtube_url diisi (tiada placeholder kosong, ikut prinsip
 // "jangan papar kawalan untuk media yang tiada").
 function updateYoutubeButton(item){
-  btnYoutube.style.display = (item && item.youtube_url) ? "block" : "none";
+  btnYoutube.style.display = (item && item.youtube_url) ? "flex" : "none";
 }
 
 document.getElementById("hotspot-close").addEventListener("click", () => hotspotPanel.classList.remove("show"));
@@ -249,7 +264,8 @@ function load3D(preserveInfoPanel){
   hudTitle.textContent = currentItem.title;
   hudStatusText.textContent = statusTextFor(currentItem);
   threeSession = start3DViewer(document.getElementById("stage"), currentItem, {
-    onHotspotClick: showHotspot
+    onHotspotClick: showHotspot,
+    lighting: lightingCfg
   });
   updateYoutubeButton(currentItem);
   if (preserveInfoPanel && infoPanel.classList.contains("show")) renderItemInfo(currentItem);
@@ -273,6 +289,7 @@ async function loadAR(){
     },
     onTargetLost: () => { hudStatusText.textContent = "Cari kad…"; },
     onHotspotClick: showHotspot,
+    lighting: lightingCfg,
     onError: (err) => {
       console.error(err);
       hudStatusText.textContent = "AR gagal — kembali ke Mod 3D";
@@ -292,6 +309,7 @@ function switchMode(mode){
     btn3d.classList.add("active"); btnAr.classList.remove("active");
     toastAr.style.display = "none";
     currentMode = "3d";
+    viewerWrap.classList.add("mode-3d"); viewerWrap.classList.remove("mode-ar");
     renderItemPicker();
     load3D();
   } else {
@@ -300,6 +318,7 @@ function switchMode(mode){
     document.getElementById("ar-container").style.display = "block";
     btnAr.classList.add("active"); btn3d.classList.remove("active");
     currentMode = "ar";
+    viewerWrap.classList.add("mode-ar"); viewerWrap.classList.remove("mode-3d");
     renderItemPicker();
     hudTitle.textContent = "Cari sebarang kad…";
     toastAr.style.display = "block";
@@ -311,10 +330,20 @@ btnAr.addEventListener("click", () => switchMode("ar"));
 document.getElementById("toast-ar-close").addEventListener("click", () => { toastAr.style.display = "none"; loadAR(); });
 
 async function boot(){
+  viewerWrap.classList.add("mode-3d"); // lalai Mod 3D - sorok pill tajuk berulang dari mula
   if (!topicId || !apiConfigured()){
     hudTitle.textContent = "Ralat konfigurasi";
     hudStatusText.textContent = !topicId ? "Topik tiada dalam URL" : "API belum disambung";
     return;
+  }
+  // Tetapan Pencahayaan (Sheet "Settings") - PILIHAN. Kalau Sheet lama belum
+  // ada baris ini lagi, atau panggilan gagal, guna DEFAULT_LIGHTING senyap-
+  // senyap (jangan biar seluruh halaman gagal boot sebab satu ciri kecil).
+  try {
+    const settingsRows = await Api.getSettings();
+    lightingCfg = mergeLighting(settingsRows && settingsRows[0]);
+  } catch (err) {
+    lightingCfg = DEFAULT_LIGHTING;
   }
   try {
     bundle = await Api.getTopicBundle(topicId);
