@@ -47,13 +47,19 @@ const LOST_GRACE_FRAMES = 5; // toleransi bingkai hilang sebelum model disorokka
 
 // Penukaran paksi pose (posit -> Three.js) kini betul secara matematik dan
 // TAK PERLU dilaraskan manual (lihat poseToQuatPos di bawah). Yang mungkin
-// perlu dilaraskan cuma "arah model" (facing180) - satu toggle mudah dalam
-// panel "Debug AR" kalau model authored menghadap arah bertentangan.
-function loadFacing180(){
-  return localStorage.getItem("arFacing180") === "1";
+// perlu dilaraskan cuma "arah model" (yawSteps) - model authored boleh jadi
+// menghadap arah lain berbanding kad, jadi admin/pelajar boleh putar 90°
+// sedikit demi sedikit (bukan cuma "songsang 180°" macam dahulu) sehingga
+// model betul-betul menghadap depan di atas kad.
+function loadYawSteps(){
+  const saved = parseInt(localStorage.getItem("arYawSteps"), 10);
+  if (!isNaN(saved)) return ((saved % 4) + 4) % 4;
+  // keserasian ke belakang: kit lama simpan suis 180° sahaja ("arFacing180")
+  if (localStorage.getItem("arFacing180") === "1") return 2;
+  return 0;
 }
-function saveFacing180(v){
-  localStorage.setItem("arFacing180", v ? "1" : "0");
+function saveYawSteps(v){
+  localStorage.setItem("arYawSteps", String(((v % 4) + 4) % 4));
 }
 function loadModelScale(){
   const saved = parseFloat(localStorage.getItem("arModelScale"));
@@ -675,7 +681,7 @@ function poseToQuatPos(rotation, translation){
   return { q, p };
 }
 
-function buildDebugPanel(container, initialScale, onScaleChange, initialFacing180, onFacingChange){
+function buildDebugPanel(container, initialScale, onScaleChange, initialYawSteps, onYawChange){
   // diletak di kiri-atas, kawasan yang KOSONG semasa mod AR (item-picker
   // hanya papar dalam mod 3D, target-banner kuiz di tengah) - dan diberi
   // gaya paling menonjol (latar oren pejal) supaya mustahil terlepas pandang.
@@ -692,18 +698,30 @@ function buildDebugPanel(container, initialScale, onScaleChange, initialFacing18
       <button id="scale-up" style="flex:0 0 auto;font-size:16px;width:32px;height:32px;background:#232326;color:#f2f1ee;border:1px solid #333;border-radius:4px;cursor:pointer;">+</button>
     </div>
     <p style="font-size:10px;color:#a8a8ac;margin:0 0 12px;">Atau cubit dua jari terus atas skrin (dua jari juga boleh seret untuk gerak model).</p>
-    <div style="color:#ff7a1a;text-transform:uppercase;font-size:11px;letter-spacing:.08em;margin-bottom:8px;">Arah Model</div>
-    <label style="display:flex;align-items:center;gap:8px;margin-bottom:4px;"><input type="checkbox" id="facing-180" style="width:16px;height:16px;"> Pusing 180° (model menghadap terbalik)</label>
-    <p style="font-size:10px;color:#a8a8ac;margin:8px 0 0;line-height:1.5;">Toggle SEKALI kalau model sentiasa membelakangkan kamera secara konsisten.</p>
-    <p style="font-size:10px;color:#a8a8ac;margin:10px 0 0;line-height:1.5;border-top:1px solid #333;padding-top:10px;">Seret SATU jari atas model = pusing bebas. Seret DUA jari = gerak (pan) model. Tekan butang <strong style="color:#3ecf8e;">🔓 IKUT KAD</strong> untuk kunci model diam (senang letak kad, lepas tangan).</p>
+    <div style="color:#ff7a1a;text-transform:uppercase;font-size:11px;letter-spacing:.08em;margin-bottom:8px;">Arah Model (putar 90° setiap tekan)</div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+      <button id="yaw-left" style="flex:0 0 auto;font-size:15px;width:36px;height:32px;background:#232326;color:#f2f1ee;border:1px solid #333;border-radius:4px;cursor:pointer;">↺90°</button>
+      <span id="yaw-value" style="flex:1;text-align:center;">0°</span>
+      <button id="yaw-right" style="flex:0 0 auto;font-size:15px;width:36px;height:32px;background:#232326;color:#f2f1ee;border:1px solid #333;border-radius:4px;cursor:pointer;">90°↻</button>
+    </div>
+    <p style="font-size:10px;color:#a8a8ac;margin:8px 0 0;line-height:1.5;">Tekan sehingga model betul-betul menghadap depan di atas kad. Nilai ini disimpan &amp; terpakai untuk SEMUA item topik ini.</p>
+    <p style="font-size:10px;color:#a8a8ac;margin:10px 0 0;line-height:1.5;border-top:1px solid #333;padding-top:10px;">Seret SATU jari atas model = pusing bebas. Seret DUA jari = gerak (pan) model.</p>
+    <p style="font-size:10px;color:#a8a8ac;margin:10px 0 0;line-height:1.5;border-top:1px solid #333;padding-top:10px;">Model SUDAH auto-ikut kad setiap masa secara lalai (gerak/putar kad, model turut sama). Tekan butang <strong style="color:#3ecf8e;">🔒 BEKU</strong> hanya kalau nak model kekal diam di skrin buat sementara (contohnya nak letak kad, lepas tangan) - tekan sekali lagi untuk sambung ikut kad semula.</p>
   `;
   container.appendChild(btn);
   container.appendChild(panel);
   btn.addEventListener("click", () => { panel.style.display = panel.style.display === "none" ? "block" : "none"; });
 
-  const facingCb = panel.querySelector("#facing-180");
-  facingCb.checked = !!initialFacing180;
-  facingCb.addEventListener("change", () => onFacingChange(facingCb.checked));
+  const yawValueEl = panel.querySelector("#yaw-value");
+  let yawSteps = ((initialYawSteps % 4) + 4) % 4;
+  function refreshYawLabel(){ yawValueEl.textContent = (yawSteps * 90) + "°"; }
+  refreshYawLabel();
+  panel.querySelector("#yaw-left").addEventListener("click", () => {
+    yawSteps = ((yawSteps - 1) % 4 + 4) % 4; refreshYawLabel(); onYawChange(yawSteps);
+  });
+  panel.querySelector("#yaw-right").addEventListener("click", () => {
+    yawSteps = (yawSteps + 1) % 4; refreshYawLabel(); onYawChange(yawSteps);
+  });
 
   const scaleValueEl = panel.querySelector("#scale-value");
   function refreshScaleLabel(v){ scaleValueEl.textContent = v.toFixed(1) + "x"; }
@@ -720,11 +738,15 @@ function buildDebugPanel(container, initialScale, onScaleChange, initialFacing18
   return { btn, panel, refreshScaleLabel };
 }
 
+// "Kunci"/lock di sini bermaksud BEKUKAN pose semasa (untuk letak kad turun,
+// lepas tangan tanpa model terlari) - BUKAN "lekat kuat pada kad". Ikut-kad
+// (auto-tracking) ialah TINGKAH LAKU LALAI sepanjang masa model kelihatan -
+// tak perlu tekan apa-apa untuk itu; lock cuma jeda/freeze ia buat sementara.
 function buildLockButton(container, getLocked, setLocked){
   const btn = document.createElement("button");
   function render(){
     const on = getLocked();
-    btn.textContent = on ? "🔒 TERKUNCI" : "🔓 IKUT KAD";
+    btn.textContent = on ? "🔒 BEKU" : "🔓 AUTO-IKUT KAD";
     btn.style.background = on ? "#3ecf8e" : "rgba(0,0,0,.6)";
     btn.style.color = on ? "#111" : "#f2f1ee";
     btn.style.borderColor = on ? "#3ecf8e" : "#333";
@@ -807,7 +829,7 @@ export async function startARViewer(container, topicId, items, {
   const SMOOTH_ALPHA = 0.35; // 0=beku sepenuhnya, 1=ikut mentah (bergegar). 0.35 = seimbang.
   let currentModelScale = loadModelScale();
   let locked = false;
-  let facing180 = loadFacing180();
+  let yawSteps = loadYawSteps();
 
   // offset putaran manual (drag jari) + pan (seret dua jari) - dilapis ATAS
   // orientasi kad, jadi pelajar boleh laras model dengan jari tanpa perlu
@@ -840,7 +862,7 @@ export async function startARViewer(container, topicId, items, {
     const finalQuat = quat.clone().multiply(
       new THREE.Quaternion().setFromEuler(new THREE.Euler(
         dragRotation.pitch,
-        dragRotation.yaw + (facing180 ? Math.PI : 0),
+        dragRotation.yaw + yawSteps * (Math.PI / 2),
         0
       ))
     );
@@ -852,8 +874,8 @@ export async function startARViewer(container, topicId, items, {
     );
   }
 
-  const debugPanel = buildDebugPanel(container, currentModelScale, applyModelScale, facing180, (v) => {
-    facing180 = v; saveFacing180(v);
+  const debugPanel = buildDebugPanel(container, currentModelScale, applyModelScale, yawSteps, (v) => {
+    yawSteps = v; saveYawSteps(v);
   });
   const lockBtn = buildLockButton(container, () => locked, (v) => { locked = v; });
 
