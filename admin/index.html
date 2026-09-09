@@ -229,6 +229,50 @@
       </div>
     </div>
 
+    <div class="panel" id="settings-cms-panel" style="display:none;">
+      <h2>🔆 Pencahayaan Model 3D/AR</h2>
+      <p style="font-size:12px;color:var(--text-dim);margin:-6px 0 16px;">
+        Satu tetapan untuk SEMUA pelajar, semua topik. Laras slider — kesan kelihatan
+        SERTA-MERTA dalam pratonton di kanan — kemudian tekan "Simpan" untuk terap
+        pada Mod 3D &amp; Mod AR pelajar.
+      </p>
+      <div class="items-cms-layout">
+        <div class="items-cms-left">
+          <label for="lt-ambient">Kecerahan Ambien (menyeluruh) — <span id="lt-ambient-value">1.05x</span></label>
+          <input type="range" id="lt-ambient" min="0" max="3" step="0.05" value="1.05" style="width:100%;">
+
+          <label for="lt-direct" style="margin-top:14px;">Lampu Utama (arah tetap) — <span id="lt-direct-value">1.0x</span></label>
+          <input type="range" id="lt-direct" min="0" max="3" step="0.05" value="1" style="width:100%;">
+
+          <label for="lt-rim" style="margin-top:14px;">Lampu Tepi (rim, biru lembut) — <span id="lt-rim-value">0.6x</span></label>
+          <input type="range" id="lt-rim" min="0" max="2" step="0.05" value="0.6" style="width:100%;">
+
+          <label for="lt-exposure" style="margin-top:14px;">Pendedahan (Exposure) — <span id="lt-exposure-value">1.0x</span></label>
+          <input type="range" id="lt-exposure" min="0.2" max="3" step="0.05" value="1" style="width:100%;">
+
+          <label for="lt-bgcolor" style="margin-top:14px;">Warna Latar (Mod 3D sahaja — tiada kesan dalam Mod AR, kamera di belakang)</label>
+          <input type="color" id="lt-bgcolor" value="#0c0d0f" style="width:100%;height:38px;padding:2px;border:1px solid var(--line);border-radius:8px;">
+
+          <label style="display:flex;align-items:center;gap:8px;margin-top:14px;font-weight:400;">
+            <input type="checkbox" id="lt-autorotate" checked style="width:16px;height:16px;"> Benarkan putaran automatik (idle spin) dalam Mod 3D
+          </label>
+
+          <button type="button" class="btn block" id="lt-save-btn" style="margin-top:18px;">Simpan Pencahayaan</button>
+          <button type="button" class="btn ghost block" id="lt-reset-btn" style="margin-top:8px;">Set Semula ke Default</button>
+        </div>
+
+        <div class="items-cms-right">
+          <div id="lt-preview" style="height:420px;border:1px solid var(--line);border-radius:var(--radius);position:relative;margin-top:0;overflow:hidden;background:#0c0d0f;">
+            <p id="lt-preview-placeholder" style="color:var(--text-dim);font-size:12px;padding:20px;margin:0;">Memuatkan pratonton…</p>
+          </div>
+          <p style="font-size:11px;color:var(--text-dim);margin-top:10px;line-height:1.6;">
+            Pratonton guna model contoh (mesin SMAW) — seret untuk putar, cubit/scroll untuk zoom.
+            Ini SAMA pencahayaan yang pelajar akan nampak pada mana-mana item, semua topik.
+          </p>
+        </div>
+      </div>
+    </div>
+
     <div class="panel" id="scores-panel" style="display:none;">
       <h2>Reset Papan Pendahulu</h2>
       <label for="reset-topic">Topik (kosongkan untuk reset SEMUA)</label>
@@ -284,7 +328,19 @@ const SHEET_CONFIGS = {
     { key:"timestamp", label:"Masa" }, { key:"nama", label:"Nama" }, { key:"kelas", label:"Kelas" },
     { key:"institusi", label:"Institusi" }, { key:"topic_id", label:"Topik" },
     { key:"score", label:"Skor" }, { key:"total_possible", label:"Maks" }, { key:"percentage", label:"%" }
-  ], readOnly:true }
+  ], readOnly:true },
+  // Satu baris sahaja ("global") - diurus sepenuhnya oleh panel tersuai
+  // #settings-cms-panel (customPanel:true, macam Hotspots/Items/dll), tak
+  // guna jadual generik. `fields` cuma disimpan di sini untuk rujukan.
+  Settings: { tabLabel: "Pencahayaan", customPanel: true, fields: [
+    { key:"settings_id", label:"ID", type:"text", primary:true },
+    { key:"ambient_intensity", label:"Kecerahan Ambien", type:"number" },
+    { key:"direct_intensity", label:"Lampu Utama", type:"number" },
+    { key:"rim_intensity", label:"Lampu Tepi", type:"number" },
+    { key:"exposure", label:"Pendedahan", type:"number" },
+    { key:"bg_color", label:"Warna Latar", type:"text" },
+    { key:"autorotate", label:"Putaran Automatik", type:"text" }
+  ]}
 };
 // SHEET_CONFIGS ialah 'const' skrip klasik - dedahkan ke window supaya
 // skrip module (alat CMS Items) boleh capai metadata medan yang sama,
@@ -409,7 +465,7 @@ function renderTabs(){
   tabs.innerHTML = "";
   Object.keys(SHEET_CONFIGS).forEach(name => {
     const b = document.createElement("button");
-    b.textContent = name;
+    b.textContent = SHEET_CONFIGS[name].tabLabel || name;
     if (name === currentSheet) b.classList.add("active");
     b.addEventListener("click", () => { currentSheet = name; editingId = null; renderTabs(); loadSheet(); });
     tabs.appendChild(b);
@@ -484,17 +540,23 @@ async function loadSheet(){
   const isQuestions = currentSheet === "Questions";
   const isScores = currentSheet === "Scores";
   const isHotspots = currentSheet === "Hotspots";
+  const isSettings = currentSheet === "Settings";
   document.getElementById("hotspot-tool-panel").style.display = isHotspots ? "block" : "none";
   document.getElementById("items-cms-panel").style.display = isItems ? "block" : "none";
   document.getElementById("topics-cms-panel").style.display = isTopics ? "block" : "none";
   document.getElementById("questions-cms-panel").style.display = isQuestions ? "block" : "none";
+  document.getElementById("settings-cms-panel").style.display = isSettings ? "block" : "none";
   document.getElementById("scores-controls-panel").style.display = isScores ? "block" : "none";
-  const anyCms = isItems || isTopics || isQuestions || isHotspots;
+  const anyCms = isItems || isTopics || isQuestions || isHotspots || isSettings;
   document.getElementById("table-panel").style.display = anyCms ? "none" : "block";
   document.getElementById("form-panel").style.display = anyCms ? "none" : (cfg.readOnly ? "none" : "block");
   if (isHotspots) {
     if (window.initHotspotTool) window.initHotspotTool();
     return; // Hotspots diurus sepenuhnya oleh alat klik-letak - tak guna jadual generik lagi
+  }
+  if (isSettings) {
+    if (window.initSettingsCms) window.initSettingsCms();
+    return; // Pencahayaan diurus sepenuhnya oleh panel tersuai - satu baris "global" sahaja
   }
   if (isItems) {
     if (window.initItemsCms) window.initItemsCms();
@@ -620,7 +682,7 @@ if (window.passcode) boot();
 </script>
 <script src="../shared/js/models.js"></script>
 <script type="module">
-import { startHotspotEditor, start3DViewer, itemHasModel, itemHasVideo } from "../shared/js/ar-core.js";
+import { startHotspotEditor, start3DViewer, itemHasModel, itemHasVideo, DEFAULT_LIGHTING, mergeLighting } from "../shared/js/ar-core.js";
 
 let hotspotEditor = null;
 let currentEditorItem = null;
@@ -1613,6 +1675,98 @@ document.getElementById("btn-delete-question").addEventListener("click", async (
 // dipanggil dari skrip klasik (loadSheet) setiap kali tab Questions dibuka
 window.initQuestionsCms = function(){
   loadQuestionsData();
+};
+
+// ============================================================================
+// TAB "PENCAHAYAAN" (Sheet "Settings", satu baris "global") - slider laras
+// LIVE dalam pratonton (model contoh SMAW, guna startHotspotEditor macam
+// alat hotspot - kamera boleh diputar/zoom tapi klik permukaan tak buat apa
+// sebab onSurfaceClick/onMarkerClick sengaja tak dihantar). Tekan "Simpan"
+// untuk tulis ke Sheet - kesan terus untuk SEMUA pelajar (learn.html/
+// quiz.html tarik Settings ini sekali semasa boot()).
+// ============================================================================
+let lightingPreview = null;
+let settingsListenersBound = false;
+
+function setLightingUI(cfg){
+  document.getElementById("lt-ambient").value = cfg.ambient_intensity;
+  document.getElementById("lt-ambient-value").textContent = Number(cfg.ambient_intensity).toFixed(2) + "x";
+  document.getElementById("lt-direct").value = cfg.direct_intensity;
+  document.getElementById("lt-direct-value").textContent = Number(cfg.direct_intensity).toFixed(2) + "x";
+  document.getElementById("lt-rim").value = cfg.rim_intensity;
+  document.getElementById("lt-rim-value").textContent = Number(cfg.rim_intensity).toFixed(2) + "x";
+  document.getElementById("lt-exposure").value = cfg.exposure;
+  document.getElementById("lt-exposure-value").textContent = Number(cfg.exposure).toFixed(2) + "x";
+  document.getElementById("lt-bgcolor").value = cfg.bg_color;
+  document.getElementById("lt-autorotate").checked = !!cfg.autorotate;
+}
+
+function readLightingUI(){
+  return {
+    settings_id: "global",
+    ambient_intensity: parseFloat(document.getElementById("lt-ambient").value),
+    direct_intensity: parseFloat(document.getElementById("lt-direct").value),
+    rim_intensity: parseFloat(document.getElementById("lt-rim").value),
+    exposure: parseFloat(document.getElementById("lt-exposure").value),
+    bg_color: document.getElementById("lt-bgcolor").value,
+    autorotate: document.getElementById("lt-autorotate").checked
+  };
+}
+
+// Butang & slider hanya perlu SATU set pendengar seumur hidup halaman -
+// data/preview yang disegar setiap kali tab dibuka semula (lihat
+// window.initSettingsCms), bukan pendengar (elak lekat berganda).
+function bindLightingListeners(){
+  if (settingsListenersBound) return;
+  settingsListenersBound = true;
+  [
+    ["lt-ambient", "lt-ambient-value", "ambient_intensity"],
+    ["lt-direct", "lt-direct-value", "direct_intensity"],
+    ["lt-rim", "lt-rim-value", "rim_intensity"],
+    ["lt-exposure", "lt-exposure-value", "exposure"]
+  ].forEach(([inputId, labelId, key]) => {
+    document.getElementById(inputId).addEventListener("input", (ev) => {
+      const v = parseFloat(ev.target.value);
+      document.getElementById(labelId).textContent = v.toFixed(2) + "x";
+      if (lightingPreview) lightingPreview.setLighting({ [key]: v });
+    });
+  });
+  document.getElementById("lt-bgcolor").addEventListener("input", (ev) => {
+    if (lightingPreview) lightingPreview.setLighting({ bg_color: ev.target.value });
+  });
+  document.getElementById("lt-save-btn").addEventListener("click", async () => {
+    const payload = readLightingUI();
+    try {
+      await window.Api.adminSave(window.passcode, "Settings", payload);
+      window.showMsg("Pencahayaan disimpan — pelajar akan nampak kesan ini serta-merta.");
+    } catch (err) {
+      window.showMsg(err.message, true);
+    }
+  });
+  document.getElementById("lt-reset-btn").addEventListener("click", () => {
+    setLightingUI(DEFAULT_LIGHTING);
+    if (lightingPreview) lightingPreview.setLighting(DEFAULT_LIGHTING);
+  });
+}
+
+window.initSettingsCms = async function(){
+  bindLightingListeners();
+  const previewBox = document.getElementById("lt-preview");
+  previewBox.innerHTML = `<p style="color:#a8a8ac;font-size:12px;padding:20px;margin:0;">Memuatkan pratonton…</p>`;
+
+  let cfg;
+  try {
+    const rows = await window.Api.getSettings();
+    cfg = mergeLighting(rows && rows[0]);
+  } catch (err) {
+    cfg = { ...DEFAULT_LIGHTING };
+  }
+  setLightingUI(cfg);
+
+  if (lightingPreview) { lightingPreview.stop(); lightingPreview = null; }
+  // Model contoh sahaja untuk tunjuk kesan cahaya - bukan diikat kepada
+  // mana-mana item sebenar, jadi klik permukaan sengaja tak buat apa-apa.
+  lightingPreview = startHotspotEditor(previewBox, { model_ref: "buildSMAWMachine" }, [], { lighting: cfg });
 };
 </script>
 </body>
