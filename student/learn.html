@@ -21,6 +21,9 @@
 <script src="https://cdn.jsdelivr.net/gh/damianofalcioni/js-aruco2@master/src/aruco.js"></script>
 <script src="https://cdn.jsdelivr.net/gh/damianofalcioni/js-aruco2@master/src/svd.js"></script>
 <script src="https://cdn.jsdelivr.net/gh/damianofalcioni/js-aruco2@master/src/posit1.js"></script>
+<!-- OpenCV.js: optical-flow / feature tracking used by ar-core.js.
+     It is loaded after js-aruco2 and before the ES module starts AR. -->
+<script async src="https://docs.opencv.org/4.x/opencv.js"></script>
 </head>
 <body class="viewer">
 
