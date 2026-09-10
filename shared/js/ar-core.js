@@ -758,6 +758,198 @@ function buildLockButton(container, getLocked, setLocked){
   return btn;
 }
 
+
+// ============================================================================
+// MARKER-ASSISTED OPTICAL FLOW
+// ArUco establishes the pose. While ArUco is temporarily unreadable, OpenCV.js
+// follows visual features from the physical card and estimates card motion.
+// When ArUco returns, it remains the authoritative pose.
+// ============================================================================
+const FLOW_MIN_POINTS = 10;
+const FLOW_TARGET_POINTS = 80;
+const FLOW_MAX_LOST_FRAMES = 45; // roughly 1.5 s at 30 fps
+const FLOW_REINIT_INTERVAL = 12;
+const FLOW_PYRAMID_WIN = 21;
+const FLOW_PYRAMID_LEVELS = 3;
+const FLOW_RANSAC_REPROJ = 3.0;
+
+function cvReady(){
+  return typeof cv !== "undefined" && typeof cv.Mat === "function" &&
+    typeof cv.calcOpticalFlowPyrLK === "function" &&
+    typeof cv.findHomography === "function";
+}
+
+async function waitForOpenCV(timeoutMs=8000){
+  if (cvReady()) return true;
+  const start=performance.now();
+  while (performance.now()-start < timeoutMs){
+    await new Promise(r=>setTimeout(r,50));
+    if (cvReady()) return true;
+  }
+  return false;
+}
+
+function imageToGrayMat(imageData){
+  const rgba = cv.matFromImageData(imageData);
+  const gray = new cv.Mat();
+  cv.cvtColor(rgba, gray, cv.COLOR_RGBA2GRAY);
+  rgba.delete();
+  return gray;
+}
+
+function makeFlowState(){
+  return {
+    active: false,
+    lostFrames: 0,
+    refPts: null,
+    prevPts: null,
+    prevGray: null,
+    refMarkerCorners: null,
+    lastH: null,
+    framesSinceInit: 0
+  };
+}
+
+function destroyFlowState(flow){
+  if (!flow) return;
+  flow.refPts?.delete();
+  flow.prevPts?.delete();
+  flow.prevGray?.delete();
+  flow.lastH?.delete();
+  flow.refPts = flow.prevPts = flow.prevGray = flow.lastH = null;
+  flow.active = false;
+  flow.lostFrames = 0;
+  flow.framesSinceInit = 0;
+}
+
+function initFlowState(flow, gray, marker){
+  if (!cvReady() || !gray) return false;
+  destroyFlowState(flow);
+
+  const corners = marker.corners.map(c => ({ x:c.x, y:c.y }));
+  const mask = new cv.Mat(gray.rows, gray.cols, cv.CV_8UC1, new cv.Scalar(0));
+
+  // Prefer the artwork around the marker, not the ArUco pattern itself.
+  // We build a rectangular "ring" around the marker: outer area is searched
+  // for features, while the marker interior is explicitly excluded.
+  const cx=corners.reduce((a,c)=>a+c.x,0)/4;
+  const cy=corners.reduce((a,c)=>a+c.y,0)/4;
+  const outer=corners.map(c=>({x:cx+(c.x-cx)*2.0,y:cy+(c.y-cy)*2.0}));
+  const outerPoly=cv.matFromArray(4,1,cv.CV_32SC2,
+    outer.flatMap(c=>[Math.round(c.x),Math.round(c.y)]));
+  const innerPoly=cv.matFromArray(4,1,cv.CV_32SC2,
+    corners.flatMap(c=>[Math.round(c.x),Math.round(c.y)]));
+  cv.fillConvexPoly(mask,outerPoly,new cv.Scalar(255));
+  cv.fillConvexPoly(mask,innerPoly,new cv.Scalar(0));
+  outerPoly.delete();
+  innerPoly.delete();
+
+  // Avoid using the marker's black/white pattern as our only features.
+  // goodFeaturesToTrack searches the whole detected card area, so the artwork
+  // around the ArUco marker supplies the points.
+  const found = new cv.Mat();
+  cv.goodFeaturesToTrack(gray, found, FLOW_TARGET_POINTS, 0.01, 7, mask, 7, false, 0.04);
+  mask.delete();
+
+  if (found.rows < FLOW_MIN_POINTS) {
+    found.delete();
+    return false;
+  }
+
+  flow.refPts = found.clone();
+  flow.prevPts = found.clone();
+  flow.prevGray = gray.clone();
+  flow.refMarkerCorners = corners;
+  flow.lastH = cv.Mat.eye(3, 3, cv.CV_64F);
+  flow.active = true;
+  flow.lostFrames = 0;
+  flow.framesSinceInit = 0;
+  found.delete();
+  return true;
+}
+
+function transformPointsWithHomography(H, points){
+  const src = cv.matFromArray(points.length, 1, cv.CV_32FC2,
+    points.flatMap(p => [p.x, p.y]));
+  const dst = new cv.Mat();
+  cv.perspectiveTransform(src, dst, H);
+  const out = [];
+  for (let i=0; i<dst.rows; i++){
+    out.push({x:dst.data32F[i*2], y:dst.data32F[i*2+1]});
+  }
+  src.delete();
+  dst.delete();
+  return out;
+}
+
+function flowStep(flow, gray){
+  if (!cvReady() || !gray || !flow.active || !flow.prevGray ||
+      !flow.prevPts || !flow.refPts) return null;
+
+  const nextPts = new cv.Mat();
+  const status = new cv.Mat();
+  const err = new cv.Mat();
+  const win = new cv.Size(FLOW_PYRAMID_WIN, FLOW_PYRAMID_WIN);
+
+  cv.calcOpticalFlowPyrLK(
+    flow.prevGray, gray, flow.prevPts, nextPts, status, err,
+    win, FLOW_PYRAMID_LEVELS,
+    new cv.TermCriteria(cv.TERM_CRITERIA_EPS | cv.TERM_CRITERIA_COUNT, 30, 0.01),
+    0, 0.001
+  );
+
+  const refGood = [], curGood = [];
+  for (let i=0; i<status.rows; i++){
+    if (!status.data[i]) continue;
+    const x=nextPts.data32F[i*2], y=nextPts.data32F[i*2+1];
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    if (x<0 || y<0 || x>=gray.cols || y>=gray.rows) continue;
+    refGood.push({x:flow.refPts.data32F[i*2], y:flow.refPts.data32F[i*2+1]});
+    curGood.push({x,y});
+  }
+  status.delete(); err.delete();
+
+  if (refGood.length < FLOW_MIN_POINTS){
+    nextPts.delete();
+    return {ok:false,count:refGood.length};
+  }
+
+  const refMat=cv.matFromArray(refGood.length,1,cv.CV_32FC2,refGood.flatMap(p=>[p.x,p.y]));
+  const curMat=cv.matFromArray(curGood.length,1,cv.CV_32FC2,curGood.flatMap(p=>[p.x,p.y]));
+  const inlierMask=new cv.Mat();
+  const H=cv.findHomography(refMat,curMat,cv.RANSAC,FLOW_RANSAC_REPROJ,inlierMask);
+  refMat.delete(); curMat.delete();
+
+  if (H.empty()){
+    H.delete(); inlierMask.delete(); nextPts.delete();
+    return {ok:false,count:refGood.length};
+  }
+
+  let inliers=0;
+  for (let i=0;i<inlierMask.rows;i++) if(inlierMask.data[i]) inliers++;
+  inlierMask.delete();
+
+  if (inliers<FLOW_MIN_POINTS){
+    H.delete(); nextPts.delete();
+    return {ok:false,count:inliers};
+  }
+
+  flow.prevPts.delete();
+  flow.prevPts=nextPts;
+  flow.prevGray.delete();
+  flow.prevGray=gray.clone();
+  if(flow.lastH) flow.lastH.delete();
+  flow.lastH=H.clone();
+  H.delete();
+  flow.framesSinceInit++;
+
+  return {
+    ok:true,
+    count:inliers,
+    markerCorners:transformPointsWithHomography(flow.lastH,flow.refMarkerCorners)
+  };
+}
+
 export async function startARViewer(container, topicId, items, {
   onTargetFound,   // (item) => void
   onTargetLost,    // (item) => void
@@ -796,6 +988,13 @@ export async function startARViewer(container, topicId, items, {
     video.addEventListener("loadedmetadata", res, { once: true });
   });
 
+  // OpenCV.js is optional for graceful fallback, but wait briefly so the
+  // optical-flow tracker is normally ready before the first AR frame.
+  const opticalFlowAvailable = await waitForOpenCV(8000);
+  if (!opticalFlowAvailable) {
+    console.warn("OpenCV.js tidak siap; AR akan guna ArUco sahaja.");
+  }
+
   const dw = video.videoWidth || 640, dh = video.videoHeight || 480;
   const detectionCanvas = document.createElement("canvas");
   detectionCanvas.width = dw; detectionCanvas.height = dh;
@@ -826,6 +1025,7 @@ export async function startARViewer(container, topicId, items, {
   const wasVisible = {};
   const smoothedQuat = {}; // item_id -> THREE.Quaternion (pose halus, dikemaskini setiap bingkai bila tak locked)
   const smoothedPos = {};  // item_id -> THREE.Vector3
+  const flowStates = {};    // item_id -> marker-assisted optical-flow state
   const SMOOTH_ALPHA = 0.35; // 0=beku sepenuhnya, 1=ikut mentah (bergegar). 0.35 = seimbang.
   let currentModelScale = loadModelScale();
   let locked = false;
@@ -846,6 +1046,7 @@ export async function startARViewer(container, topicId, items, {
     groupsByMarkerId[Number(item.target_index)] = { group, item };
     lostCounters[item.item_id] = 0;
     wasVisible[item.item_id] = false;
+    flowStates[item.item_id] = makeFlowState();
     hotspotMeshes.forEach(h => allHotspotMeshes.push(h));
   }));
 
@@ -999,12 +1200,18 @@ export async function startARViewer(container, topicId, items, {
     dctx.drawImage(video, 0, 0, dw, dh);
     const imageData = dctx.getImageData(0, 0, dw, dh);
     const markers = detector.detect(imageData);
+    let grayFrame = null;
+    if (opticalFlowAvailable && cvReady()) {
+      try { grayFrame = imageToGrayMat(imageData); }
+      catch (err) { console.warn("OpenCV frame conversion failed:", err); }
+    }
     const seenIds = new Set();
 
+    // 1) ArUco is the authoritative pose source whenever it is visible.
     markers.forEach(marker => {
       seenIds.add(marker.id);
       const entry = groupsByMarkerId[marker.id];
-      if (!entry) return; // penanda dikesan tapi tiada item dikaitkan dengannya
+      if (!entry) return;
 
       const corners = marker.corners.map(c => ({
         x: c.x - dw/2,
@@ -1013,51 +1220,99 @@ export async function startARViewer(container, topicId, items, {
       const pose = posit.pose(corners);
       if (!pose) return;
 
-      const { q: rawQ, p: rawP } = poseToQuatPos(pose.bestRotation, pose.bestTranslation);
+      const { q:rawQ, p:rawP } = poseToQuatPos(pose.bestRotation, pose.bestTranslation);
+      const id=entry.item.item_id;
+      const flow=flowStates[id];
 
-      if (!smoothedQuat[entry.item.item_id]) {
-        // bingkai pertama kad ini dikesan - guna terus (tiada apa nak smooth lagi)
-        smoothedQuat[entry.item.item_id] = rawQ.clone();
-        smoothedPos[entry.item.item_id] = rawP.clone();
+      if (!smoothedQuat[id]) {
+        smoothedQuat[id]=rawQ.clone();
+        smoothedPos[id]=rawP.clone();
       } else if (!locked) {
-        // slerp/lerp ke arah pose baru - hilangkan gegaran bingkai-ke-bingkai
-        // tanpa perlu "locked" untuk nampak stabil.
-        smoothedQuat[entry.item.item_id].slerp(rawQ, SMOOTH_ALPHA);
-        smoothedPos[entry.item.item_id].lerp(rawP, SMOOTH_ALPHA);
+        smoothedQuat[id].slerp(rawQ,SMOOTH_ALPHA);
+        smoothedPos[id].lerp(rawP,SMOOTH_ALPHA);
       }
-      // bila locked: langkau slerp/lerp di atas, guna nilai smoothed SEDIA ADA
-      // (kekal beku) - tapi found/lost & visibility di bawah tetap berjalan
-      // seperti biasa supaya Mod Kuiz tetap tahu kad mana sedang dilihat.
 
-      entry.group.matrix.copy(buildFinalMatrix(smoothedQuat[entry.item.item_id], smoothedPos[entry.item.item_id]));
-      entry.group.visible = true;
-      lostCounters[entry.item.item_id] = 0;
-      if (!wasVisible[entry.item.item_id]) {
-        wasVisible[entry.item.item_id] = true;
+      entry.group.matrix.copy(buildFinalMatrix(smoothedQuat[id],smoothedPos[id]));
+      entry.group.visible=true;
+      lostCounters[id]=0;
+
+      // Seed/reseed visual tracking from a fresh ArUco frame.
+      if (cvReady() && grayFrame &&
+          (!flow.active || flow.lostFrames>0 || flow.framesSinceInit>=FLOW_REINIT_INTERVAL)) {
+        try { initFlowState(flow,grayFrame,marker); }
+        catch(err) { console.warn("Optical flow init failed:",err); destroyFlowState(flow); }
+      }
+      flow.lostFrames=0;
+
+      if (!wasVisible[id]) {
+        wasVisible[id]=true;
         onTargetFound && onTargetFound(entry.item);
-        if (entry.group.userData.isVideoPlane) showVideoControls(entry.item, entry.group.userData.video);
+        if (entry.group.userData.isVideoPlane) showVideoControls(entry.item,entry.group.userData.video);
       }
     });
 
-    // items yang tak dikesan bingkai ini - beri toleransi sebelum sorok.
-    // INI SENTIASA berjalan (tak lagi dilangkau bila locked) - Mod Kuiz
-    // perlukan status found/lost yang benar-benar mengikut kamera langsung,
-    // walaupun paparan visual model itu sendiri sedang dibekukan.
-    Object.values(groupsByMarkerId).forEach(({ group, item }) => {
-      if (seenIds.has(Number(item.target_index))) return;
-      lostCounters[item.item_id] += 1;
-      if (lostCounters[item.item_id] > LOST_GRACE_FRAMES && wasVisible[item.item_id]) {
-        if (!locked) group.visible = false; // kalau locked, model kekal kelihatan walau kad hilang
-        wasVisible[item.item_id] = false;
-        onTargetLost && onTargetLost(item);
-        // kad hilang - jeda video (Bahagian H: jangan terus main video di
-        // latar bila kad dah tak dalam pandangan kamera)
-        if (group.userData.isVideoPlane && group.userData.video) {
-          group.userData.video.pause();
-          hideVideoControlsIfActive(item);
+    // 2) ArUco disappeared: track the card artwork instead.
+    if (opticalFlowAvailable && cvReady() && grayFrame) {
+      Object.values(groupsByMarkerId).forEach(({group,item}) => {
+        const id=item.item_id;
+        const flow=flowStates[id];
+        if (seenIds.has(Number(item.target_index)) || !flow.active || !wasVisible[id]) return;
+
+        const result=flowStep(flow,grayFrame);
+        if (result && result.ok) {
+          flow.lostFrames=0;
+          const trackedCorners=result.markerCorners.map(c => ({
+            x:c.x-dw/2,
+            y:dh/2-c.y
+          }));
+          const flowPose=posit.pose(trackedCorners);
+
+          if (flowPose) {
+            const {q,p}=poseToQuatPos(flowPose.bestRotation,flowPose.bestTranslation);
+            if (!locked) {
+              smoothedQuat[id].slerp(q,0.22);
+              smoothedPos[id].lerp(p,0.22);
+              group.matrix.copy(buildFinalMatrix(smoothedQuat[id],smoothedPos[id]));
+            }
+            group.visible=true;
+            lostCounters[id]=0;
+            return;
+          }
         }
-      }
-    });
+
+        flow.lostFrames++;
+        // Keep the last good pose during short tracking hiccups.
+        if (flow.lostFrames<=FLOW_MAX_LOST_FRAMES) {
+          group.visible=true;
+        } else if (wasVisible[id]) {
+          group.visible=false;
+          wasVisible[id]=false;
+          destroyFlowState(flow);
+          onTargetLost && onTargetLost(item);
+          if (group.userData.isVideoPlane && group.userData.video) {
+            group.userData.video.pause();
+            hideVideoControlsIfActive(item);
+          }
+        }
+      });
+    } else {
+      // If OpenCV.js failed to load, preserve the old ArUco-only behavior.
+      Object.values(groupsByMarkerId).forEach(({group,item}) => {
+        if (seenIds.has(Number(item.target_index))) return;
+        lostCounters[item.item_id]++;
+        if (lostCounters[item.item_id]>LOST_GRACE_FRAMES && wasVisible[item.item_id]) {
+          if (!locked) group.visible=false;
+          wasVisible[item.item_id]=false;
+          onTargetLost && onTargetLost(item);
+          if (group.userData.isVideoPlane && group.userData.video) {
+            group.userData.video.pause();
+            hideVideoControlsIfActive(item);
+          }
+        }
+      });
+    }
+
+    if (grayFrame) grayFrame.delete();
 
     // animasi .glb dari Blender (kalau ada, utk SEMUA item supaya tak
     // "tersentak" bila kad hilang-jumpa semula) + segar tekstur video yang
@@ -1078,7 +1333,10 @@ export async function startARViewer(container, topicId, items, {
     stop(){
       running = false;
       stream.getTracks().forEach(t => t.stop());
-      Object.values(groupsByMarkerId).forEach(({ group }) => disposeVideo(group));
+      Object.values(groupsByMarkerId).forEach(({ group, item }) => {
+        disposeVideo(group);
+        destroyFlowState(flowStates[item.item_id]);
+      });
       window.removeEventListener("resize", onResize);
       container.innerHTML = "";
     }
