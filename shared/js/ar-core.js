@@ -39,28 +39,18 @@ window.ROOT_BASE_URL = new URL("../../", import.meta.url).href;
 
 // Satu "unit" saiz penanda = 1 unit skala Three.js (bukan mm sebenar) -
 // ini elak keperluan ukur kad sebenar. MODEL_SCALE ialah default awal sahaja -
-// boleh dilaraskan LIVE guna slider dalam panel "Debug AR" (cubit skrin pun
-// boleh - lihat pinch-to-zoom di bawah), nilai tersimpan automatik.
+// boleh dilaraskan LIVE guna cubit skrin (pinch-to-zoom, lihat di bawah),
+// nilai tersimpan automatik.
 const MARKER_UNIT_SIZE = 1;
 const DEFAULT_MODEL_SCALE = 2.2;
 const LOST_GRACE_FRAMES = 5; // toleransi bingkai hilang sebelum model disorokkan (elak kelipan)
 
-// Penukaran paksi pose (posit -> Three.js) kini betul secara matematik dan
-// TAK PERLU dilaraskan manual (lihat poseToQuatPos di bawah). Yang mungkin
-// perlu dilaraskan cuma "arah model" (yawSteps) - model authored boleh jadi
-// menghadap arah lain berbanding kad, jadi admin/pelajar boleh putar 90°
-// sedikit demi sedikit (bukan cuma "songsang 180°" macam dahulu) sehingga
-// model betul-betul menghadap depan di atas kad.
-function loadYawSteps(){
-  const saved = parseInt(localStorage.getItem("arYawSteps"), 10);
-  if (!isNaN(saved)) return ((saved % 4) + 4) % 4;
-  // keserasian ke belakang: kit lama simpan suis 180° sahaja ("arFacing180")
-  if (localStorage.getItem("arFacing180") === "1") return 2;
-  return 0;
-}
-function saveYawSteps(v){
-  localStorage.setItem("arYawSteps", String(((v % 4) + 4) % 4));
-}
+// Kedudukan MULA model di atas kad AR (sebelum sebarang putaran jari).
+// Model authored asalnya menghadap tepi kad, bukan depan - jadi kekal
+// diputar 90° (¼ pusingan) supaya "hadapan" model menghadap pengguna sebaik
+// kad dikesan. Nak ubah arah ini? Tukar SAHAJA nombor ini (dalam unit
+// suku-pusingan: 0=0°, 1=90°, 2=180°, 3=-90°) - tiada panel/suis diperlukan.
+const BASE_YAW_STEPS = 1; // 1 x 90°
 function loadModelScale(){
   const saved = parseFloat(localStorage.getItem("arModelScale"));
   return isNaN(saved) ? DEFAULT_MODEL_SCALE : saved;
@@ -314,13 +304,15 @@ function makeRaycastHandler(camera, getMeshMap, onHit){
 }
 
 // ==================== 3D MODE (no camera) ====================
-// Butang ▶ MAIN / ⏸ JEDA yang sama dipakai dalam Mod 3D dan Mod AR - main
+// Butang ▶ PLAY / ⏸ PAUSE yang sama dipakai dalam Mod 3D dan Mod AR - main
 // perlu ditekan pengguna (Bahagian H: jangan andaikan autoplay bunyi
-// berfungsi di telefon).
+// berfungsi di telefon). z-index (4) sengaja LEBIH RENDAH dari panel info/
+// hotspot (.hotspot-panel, z-index:6 dalam style.css) - bila panel "Keterangan
+// Item" terbuka, ia melitupi butang ini (bukan sebaliknya).
 function attachVideoPlayButton(container, video, style){
   const btn = document.createElement("button");
-  btn.textContent = "▶ MAIN";
-  btn.style.cssText = style || "position:absolute;bottom:80px;left:50%;transform:translateX(-50%);z-index:20;font-family:monospace;font-weight:600;font-size:13px;padding:10px 18px;background:#ff7a1a;color:#111;border:none;border-radius:24px;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.5);";
+  btn.textContent = "▶ PLAY";
+  btn.style.cssText = style || "position:absolute;bottom:80px;left:50%;transform:translateX(-50%);z-index:4;font-family:monospace;font-weight:600;font-size:13px;padding:10px 18px;background:#ff7a1a;color:#111;border:none;border-radius:24px;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.5);";
   container.appendChild(btn);
   btn.addEventListener("click", () => {
     if (video.paused) {
@@ -330,9 +322,9 @@ function attachVideoPlayButton(container, video, style){
       // disekat oleh dasar autoplay kebanyakan browser mobile.
       video.muted = false;
       video.play();
-      btn.textContent = "⏸ JEDA";
+      btn.textContent = "⏸ PAUSE";
     }
-    else { video.pause(); btn.textContent = "▶ MAIN"; }
+    else { video.pause(); btn.textContent = "▶ PLAY"; }
   });
   return btn;
 }
@@ -681,77 +673,21 @@ function poseToQuatPos(rotation, translation){
   return { q, p };
 }
 
-function buildDebugPanel(container, initialScale, onScaleChange, initialYawSteps, onYawChange){
-  // diletak di kiri-atas, kawasan yang KOSONG semasa mod AR (item-picker
-  // hanya papar dalam mod 3D, target-banner kuiz di tengah) - dan diberi
-  // gaya paling menonjol (latar oren pejal) supaya mustahil terlepas pandang.
-  const btn = document.createElement("button");
-  btn.textContent = "⚙ LARAS AR";
-  btn.style.cssText = "position:absolute;top:56px;left:14px;z-index:50;font-family:monospace;font-weight:600;font-size:13px;padding:10px 16px;background:#ff7a1a;color:#111;border:none;border-radius:24px;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.5);";
-  const panel = document.createElement("div");
-  panel.style.cssText = "position:absolute;top:152px;left:14px;z-index:50;background:rgba(10,10,11,.97);border:2px solid #ff7a1a;border-radius:6px;padding:14px 16px;display:none;font-family:monospace;font-size:12px;color:#f2f1ee;min-width:200px;box-shadow:0 4px 16px rgba(0,0,0,.6);";
-  panel.innerHTML = `
-    <div style="color:#ff7a1a;text-transform:uppercase;font-size:11px;letter-spacing:.08em;margin-bottom:10px;">Saiz Model</div>
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
-      <button id="scale-down" style="flex:0 0 auto;font-size:16px;width:32px;height:32px;background:#232326;color:#f2f1ee;border:1px solid #333;border-radius:4px;cursor:pointer;">−</button>
-      <span id="scale-value" style="flex:1;text-align:center;">1.5x</span>
-      <button id="scale-up" style="flex:0 0 auto;font-size:16px;width:32px;height:32px;background:#232326;color:#f2f1ee;border:1px solid #333;border-radius:4px;cursor:pointer;">+</button>
-    </div>
-    <p style="font-size:10px;color:#a8a8ac;margin:0 0 12px;">Atau cubit dua jari terus atas skrin (dua jari juga boleh seret untuk gerak model).</p>
-    <div style="color:#ff7a1a;text-transform:uppercase;font-size:11px;letter-spacing:.08em;margin-bottom:8px;">Arah Model (putar 90° setiap tekan)</div>
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-      <button id="yaw-left" style="flex:0 0 auto;font-size:15px;width:36px;height:32px;background:#232326;color:#f2f1ee;border:1px solid #333;border-radius:4px;cursor:pointer;">↺90°</button>
-      <span id="yaw-value" style="flex:1;text-align:center;">0°</span>
-      <button id="yaw-right" style="flex:0 0 auto;font-size:15px;width:36px;height:32px;background:#232326;color:#f2f1ee;border:1px solid #333;border-radius:4px;cursor:pointer;">90°↻</button>
-    </div>
-    <p style="font-size:10px;color:#a8a8ac;margin:8px 0 0;line-height:1.5;">Tekan sehingga model betul-betul menghadap depan di atas kad. Nilai ini disimpan &amp; terpakai untuk SEMUA item topik ini.</p>
-    <p style="font-size:10px;color:#a8a8ac;margin:10px 0 0;line-height:1.5;border-top:1px solid #333;padding-top:10px;">Seret SATU jari atas model = pusing bebas. Seret DUA jari = gerak (pan) model.</p>
-    <p style="font-size:10px;color:#a8a8ac;margin:10px 0 0;line-height:1.5;border-top:1px solid #333;padding-top:10px;">Model SUDAH auto-ikut kad setiap masa secara lalai (gerak/putar kad, model turut sama). Tekan butang <strong style="color:#3ecf8e;">🔒 BEKU</strong> hanya kalau nak model kekal diam di skrin buat sementara (contohnya nak letak kad, lepas tangan) - tekan sekali lagi untuk sambung ikut kad semula.</p>
-  `;
-  container.appendChild(btn);
-  container.appendChild(panel);
-  btn.addEventListener("click", () => { panel.style.display = panel.style.display === "none" ? "block" : "none"; });
-
-  const yawValueEl = panel.querySelector("#yaw-value");
-  let yawSteps = ((initialYawSteps % 4) + 4) % 4;
-  function refreshYawLabel(){ yawValueEl.textContent = (yawSteps * 90) + "°"; }
-  refreshYawLabel();
-  panel.querySelector("#yaw-left").addEventListener("click", () => {
-    yawSteps = ((yawSteps - 1) % 4 + 4) % 4; refreshYawLabel(); onYawChange(yawSteps);
-  });
-  panel.querySelector("#yaw-right").addEventListener("click", () => {
-    yawSteps = (yawSteps + 1) % 4; refreshYawLabel(); onYawChange(yawSteps);
-  });
-
-  const scaleValueEl = panel.querySelector("#scale-value");
-  function refreshScaleLabel(v){ scaleValueEl.textContent = v.toFixed(1) + "x"; }
-  refreshScaleLabel(initialScale);
-  panel.querySelector("#scale-down").addEventListener("click", () => {
-    const v = Math.max(0.3, (parseFloat(scaleValueEl.textContent) || initialScale) - 0.2);
-    refreshScaleLabel(v); onScaleChange(v);
-  });
-  panel.querySelector("#scale-up").addEventListener("click", () => {
-    const v = Math.min(6, (parseFloat(scaleValueEl.textContent) || initialScale) + 0.2);
-    refreshScaleLabel(v); onScaleChange(v);
-  });
-
-  return { btn, panel, refreshScaleLabel };
-}
-
-// "Kunci"/lock di sini bermaksud BEKUKAN pose semasa (untuk letak kad turun,
-// lepas tangan tanpa model terlari) - BUKAN "lekat kuat pada kad". Ikut-kad
-// (auto-tracking) ialah TINGKAH LAKU LALAI sepanjang masa model kelihatan -
-// tak perlu tekan apa-apa untuk itu; lock cuma jeda/freeze ia buat sementara.
+// "Kunci"/BEKU di sini bermaksud: model TERUS ikut kedudukan & putaran kad
+// sebenar (sama macam lalai - TIDAK dibekukan diam di skrin), tapi putaran
+// jari (seret satu jari) DIMATIKAN - satu-satunya cara putar model ialah
+// putar kad secara fizikal. Cubit dua jari (zoom/skala) & seret dua jari
+// (pan) kekal berfungsi dalam kedua-dua keadaan.
 function buildLockButton(container, getLocked, setLocked){
   const btn = document.createElement("button");
   function render(){
     const on = getLocked();
-    btn.textContent = on ? "🔒 BEKU" : "🔓 AUTO-IKUT KAD";
+    btn.textContent = on ? "🔒 BEKU (putar guna kad)" : "🔓 AUTO-IKUT KAD";
     btn.style.background = on ? "#3ecf8e" : "rgba(0,0,0,.6)";
     btn.style.color = on ? "#111" : "#f2f1ee";
     btn.style.borderColor = on ? "#3ecf8e" : "#333";
   }
-  btn.style.cssText = "position:absolute;top:104px;left:14px;z-index:50;font-family:monospace;font-weight:600;font-size:12px;padding:9px 14px;border:1px solid #333;border-radius:24px;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.5);";
+  btn.style.cssText = "position:absolute;top:56px;left:14px;z-index:50;font-family:monospace;font-weight:600;font-size:12px;padding:10px 14px;border:1px solid #333;border-radius:24px;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.5);";
   render();
   container.appendChild(btn);
   btn.addEventListener("click", () => { setLocked(!getLocked()); render(); });
@@ -824,16 +760,16 @@ export async function startARViewer(container, topicId, items, {
   const allHotspotMeshes = [];
   const lostCounters = {};
   const wasVisible = {};
-  const smoothedQuat = {}; // item_id -> THREE.Quaternion (pose halus, dikemaskini setiap bingkai bila tak locked)
+  const smoothedQuat = {}; // item_id -> THREE.Quaternion (pose halus, dikemaskini setiap bingkai)
   const smoothedPos = {};  // item_id -> THREE.Vector3
   const SMOOTH_ALPHA = 0.35; // 0=beku sepenuhnya, 1=ikut mentah (bergegar). 0.35 = seimbang.
   let currentModelScale = loadModelScale();
   let locked = false;
-  let yawSteps = loadYawSteps();
 
   // offset putaran manual (drag jari) + pan (seret dua jari) - dilapis ATAS
   // orientasi kad, jadi pelajar boleh laras model dengan jari tanpa perlu
-  // gerak kad fizikal.
+  // gerak kad fizikal. DIMATIKAN (yaw/pitch dibeku pada 0) bila locked=true -
+  // lihat buildLockButton() di bawah.
   const dragRotation = { yaw: 0, pitch: 0 };
   const panOffset = new THREE.Vector3(0, 0, 0);
   const scaleV = new THREE.Vector3();
@@ -862,7 +798,7 @@ export async function startARViewer(container, topicId, items, {
     const finalQuat = quat.clone().multiply(
       new THREE.Quaternion().setFromEuler(new THREE.Euler(
         dragRotation.pitch,
-        dragRotation.yaw + yawSteps * (Math.PI / 2),
+        dragRotation.yaw + BASE_YAW_STEPS * (Math.PI / 2),
         0
       ))
     );
@@ -874,10 +810,10 @@ export async function startARViewer(container, topicId, items, {
     );
   }
 
-  const debugPanel = buildDebugPanel(container, currentModelScale, applyModelScale, yawSteps, (v) => {
-    yawSteps = v; saveYawSteps(v);
+  const lockBtn = buildLockButton(container, () => locked, (v) => {
+    locked = v;
+    if (locked) { dragRotation.yaw = 0; dragRotation.pitch = 0; } // pulang ke kedudukan MULA bila dikunci
   });
-  const lockBtn = buildLockButton(container, () => locked, (v) => { locked = v; });
 
   // ============ isyarat sentuh: 1 jari=putar/ketik, 2 jari=cubit(zoom)+seret(pan) ============
   let pinchStartDist = null;
@@ -907,8 +843,13 @@ export async function startARViewer(container, topicId, items, {
     const dx = x - drag.lastX, dy = y - drag.lastY;
     if (!drag.moved && Math.hypot(x - drag.startX, y - drag.startY) > DRAG_THRESHOLD) drag.moved = true;
     if (drag.moved) {
-      dragRotation.yaw += dx * ROTATE_SENSITIVITY;
-      dragRotation.pitch += dy * ROTATE_SENSITIVITY;
+      // bila locked, seretan SATU jari tak lagi putar model (putaran cuma
+      // boleh datang dari kad fizikal) - tapi gerakan masih dijejak supaya
+      // ketik hotspot (drag.moved=false) vs seret sengaja tetap dibezakan betul.
+      if (!locked) {
+        dragRotation.yaw += dx * ROTATE_SENSITIVITY;
+        dragRotation.pitch += dy * ROTATE_SENSITIVITY;
+      }
       drag.lastX = x; drag.lastY = y;
     }
   }
@@ -933,7 +874,6 @@ export async function startARViewer(container, topicId, items, {
         return;
       }
       applyModelScale(pinchStartScale * (dist / pinchStartDist));
-      debugPanel.refreshScaleLabel(currentModelScale);
       panOffset.x += (mid.x - panStartMid.x) * PAN_SENSITIVITY;
       panOffset.y -= (mid.y - panStartMid.y) * PAN_SENSITIVITY;
       panStartMid = mid;
@@ -951,7 +891,6 @@ export async function startARViewer(container, topicId, items, {
   container.addEventListener("wheel", (ev) => {
     ev.preventDefault();
     applyModelScale(currentModelScale - ev.deltaY * 0.0015);
-    debugPanel.refreshScaleLabel(currentModelScale);
   }, { passive: false });
 
   container.style.touchAction = "none";
@@ -968,7 +907,7 @@ export async function startARViewer(container, topicId, items, {
   function showVideoControls(item, videoEl){
     activeVideoItemId = item.item_id;
     if (!videoPlayBtn) {
-      videoPlayBtn = attachVideoPlayButton(container, videoEl, "position:absolute;bottom:150px;left:50%;transform:translateX(-50%);z-index:20;font-family:monospace;font-weight:600;font-size:13px;padding:10px 18px;background:#ff7a1a;color:#111;border:none;border-radius:24px;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.5);");
+      videoPlayBtn = attachVideoPlayButton(container, videoEl, "position:absolute;bottom:150px;left:50%;transform:translateX(-50%);z-index:4;font-family:monospace;font-weight:600;font-size:13px;padding:10px 18px;background:#ff7a1a;color:#111;border:none;border-radius:24px;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.5);");
     } else {
       // butang sedia ada - tukar video yang dikawalnya kepada kad BARU
       // dikesan (buang & bina semula listener supaya tak terlekat pada
@@ -976,10 +915,10 @@ export async function startARViewer(container, topicId, items, {
       const fresh = videoPlayBtn.cloneNode(true);
       videoPlayBtn.replaceWith(fresh);
       videoPlayBtn = fresh;
-      videoPlayBtn.textContent = "▶ MAIN";
+      videoPlayBtn.textContent = "▶ PLAY";
       videoPlayBtn.addEventListener("click", () => {
-        if (videoEl.paused) { videoEl.muted = false; videoEl.play(); videoPlayBtn.textContent = "⏸ JEDA"; }
-        else { videoEl.pause(); videoPlayBtn.textContent = "▶ MAIN"; }
+        if (videoEl.paused) { videoEl.muted = false; videoEl.play(); videoPlayBtn.textContent = "⏸ PAUSE"; }
+        else { videoEl.pause(); videoPlayBtn.textContent = "▶ PLAY"; }
       });
     }
     videoPlayBtn.style.display = "block";
@@ -1019,15 +958,15 @@ export async function startARViewer(container, topicId, items, {
         // bingkai pertama kad ini dikesan - guna terus (tiada apa nak smooth lagi)
         smoothedQuat[entry.item.item_id] = rawQ.clone();
         smoothedPos[entry.item.item_id] = rawP.clone();
-      } else if (!locked) {
-        // slerp/lerp ke arah pose baru - hilangkan gegaran bingkai-ke-bingkai
-        // tanpa perlu "locked" untuk nampak stabil.
+      } else {
+        // slerp/lerp ke arah pose baru - hilangkan gegaran bingkai-ke-bingkai.
+        // SENTIASA berjalan tak kira locked atau tidak - "BEKU" cuma mematikan
+        // putaran jari (dragRotation), bukan penjejakan kad (lihat dragMove()
+        // & buildLockButton() di atas) - model kekal "di atas kad" dalam
+        // kedua-dua keadaan.
         smoothedQuat[entry.item.item_id].slerp(rawQ, SMOOTH_ALPHA);
         smoothedPos[entry.item.item_id].lerp(rawP, SMOOTH_ALPHA);
       }
-      // bila locked: langkau slerp/lerp di atas, guna nilai smoothed SEDIA ADA
-      // (kekal beku) - tapi found/lost & visibility di bawah tetap berjalan
-      // seperti biasa supaya Mod Kuiz tetap tahu kad mana sedang dilihat.
 
       entry.group.matrix.copy(buildFinalMatrix(smoothedQuat[entry.item.item_id], smoothedPos[entry.item.item_id]));
       entry.group.visible = true;
@@ -1040,14 +979,11 @@ export async function startARViewer(container, topicId, items, {
     });
 
     // items yang tak dikesan bingkai ini - beri toleransi sebelum sorok.
-    // INI SENTIASA berjalan (tak lagi dilangkau bila locked) - Mod Kuiz
-    // perlukan status found/lost yang benar-benar mengikut kamera langsung,
-    // walaupun paparan visual model itu sendiri sedang dibekukan.
     Object.values(groupsByMarkerId).forEach(({ group, item }) => {
       if (seenIds.has(Number(item.target_index))) return;
       lostCounters[item.item_id] += 1;
       if (lostCounters[item.item_id] > LOST_GRACE_FRAMES && wasVisible[item.item_id]) {
-        if (!locked) group.visible = false; // kalau locked, model kekal kelihatan walau kad hilang
+        group.visible = false;
         wasVisible[item.item_id] = false;
         onTargetLost && onTargetLost(item);
         // kad hilang - jeda video (Bahagian H: jangan terus main video di
