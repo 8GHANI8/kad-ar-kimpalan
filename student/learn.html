@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>Belajar — Kad AR Kimpalan</title>
+<title>Belajar — ARClass</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../shared/css/style.css">
 
 <script type="importmap">
@@ -21,6 +21,9 @@
 <script src="https://cdn.jsdelivr.net/gh/damianofalcioni/js-aruco2@master/src/aruco.js"></script>
 <script src="https://cdn.jsdelivr.net/gh/damianofalcioni/js-aruco2@master/src/svd.js"></script>
 <script src="https://cdn.jsdelivr.net/gh/damianofalcioni/js-aruco2@master/src/posit1.js"></script>
+<!-- OpenCV.js: optical-flow / feature tracking used by ar-core.js.
+     It is loaded after js-aruco2 and before the ES module starts AR. -->
+<script async src="https://docs.opencv.org/4.x/opencv.js"></script>
 </head>
 <body class="viewer">
 
@@ -29,19 +32,38 @@
   <div id="ar-container" style="display:none;"></div>
 
   <div class="hud-top">
+    <a class="back" href="index.html">← Senarai</a>
+    <!-- Pill ini cuma papar tajuk item semasa dalam Mod AR (di mana item
+         ditentukan oleh kad yang dikesan, bukan pilihan manual) - dalam Mod
+         3D ia disorokkan (lihat .viewer-wrap.mode-3d .hud-top .title dalam
+         style.css) sebab item-select di bawah dah papar nama yang SAMA -
+         dua pill bertindan menunjukkan info berulang tanpa sebab. -->
     <div class="title" id="hud-title">Memuatkan…</div>
-    <a class="back" href="index.html">← Senarai Topik</a>
+  </div>
+
+  <!-- Satu pill kolaps sahaja, di bawah butang "← Senarai" - tekan untuk buka
+       senarai penuh item (cuma relevan dalam Mod 3D, disorok dalam Mod AR
+       sebab kad fizikal yang tentukan item, bukan pilihan manual). -->
+  <div class="item-select" id="item-select">
+    <button class="item-select-toggle" id="item-select-toggle" type="button">
+      <span id="item-select-current">Memuatkan…</span>
+      <span class="chev">▾</span>
+    </button>
+    <div class="item-select-menu" id="item-select-menu"></div>
   </div>
 
   <div class="mode-toggle">
+    <button id="btn-info" title="Keterangan">i</button>
     <button id="btn-3d" class="active">3D</button>
     <button id="btn-ar">AR</button>
+    <!-- Dipindah ke dalam susunan FAB ni (di bawah butang AR) supaya tak
+         bertindih dengan butang ▶ MAIN/JEDA video (yang dicipta oleh
+         ar-core.js di tengah-bawah skrin). Gaya bulatan merah macam ikon
+         YouTube - segitiga putih di tengah. -->
+    <button id="btn-youtube" class="youtube-btn" title="Video Penerangan" style="display:none;">
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
+    </button>
   </div>
-
-  <button class="info-toggle-btn" id="btn-info">ℹ Keterangan</button>
-  <button class="info-toggle-btn" id="btn-youtube" style="display:none;top:140px;">▶ Video Penerangan</button>
-
-  <div class="item-picker" id="item-picker"></div>
 
   <div class="hud-status" id="hud-status"><span class="dot"></span><span id="hud-status-text">Sedia</span></div>
 
@@ -70,16 +92,21 @@
 <script src="../shared/js/api.js"></script>
 <script src="../shared/js/models.js"></script>
 <script type="module">
-import { startARViewer, start3DViewer, flattenLeafItems, itemHasModel, itemHasVideo } from "../shared/js/ar-core.js";
+import { startARViewer, start3DViewer, flattenLeafItems, itemHasModel, itemHasVideo, DEFAULT_LIGHTING, mergeLighting } from "../shared/js/ar-core.js";
 
 const params = new URLSearchParams(location.search);
 const topicId = params.get("topic");
+const viewerWrap = document.querySelector(".viewer-wrap");
+let lightingCfg = DEFAULT_LIGHTING; // digantikan dengan tetapan admin sebaik boot() selesai tarik Settings
 
 const hudTitle = document.getElementById("hud-title");
 const hudStatusText = document.getElementById("hud-status-text");
 const btn3d = document.getElementById("btn-3d");
 const btnAr = document.getElementById("btn-ar");
-const itemPicker = document.getElementById("item-picker");
+const itemSelect = document.getElementById("item-select");
+const itemSelectToggle = document.getElementById("item-select-toggle");
+const itemSelectCurrent = document.getElementById("item-select-current");
+const itemSelectMenu = document.getElementById("item-select-menu");
 const hotspotPanel = document.getElementById("hotspot-panel");
 const hsTitle = document.getElementById("hs-title");
 const hsInfo = document.getElementById("hs-info");
@@ -101,7 +128,7 @@ btnYoutube.addEventListener("click", () => {
 // memang ada youtube_url diisi (tiada placeholder kosong, ikut prinsip
 // "jangan papar kawalan untuk media yang tiada").
 function updateYoutubeButton(item){
-  btnYoutube.style.display = (item && item.youtube_url) ? "block" : "none";
+  btnYoutube.style.display = (item && item.youtube_url) ? "flex" : "none";
 }
 
 document.getElementById("hotspot-close").addEventListener("click", () => hotspotPanel.classList.remove("show"));
@@ -114,7 +141,6 @@ let bundle = null;
 let leafItems = []; // senarai RATA item/sub-item yang boleh dipaparkan (utk AR & pilihan lalai)
 let currentMode = "3d";
 let currentItem = null;     // item/sub-item LEAF yang sedang dipilih dalam Mod 3D
-let expandedParentId = null; // item induk mana sedang terbuka (papar sub-item) dalam picker
 let threeSession = null;
 let arSession = null;
 let arCurrentItem = null; // item terkini dikesan dalam Mod AR (utk butang Keterangan)
@@ -169,49 +195,59 @@ btnInfo.addEventListener("click", () => {
   btnInfo.classList.toggle("active", infoPanel.classList.contains("show"));
 });
 
-// Sub-item PILIHAN: item TANPA subItems berkelakuan SAMA PERSIS macam
-// sebelum ciri ini wujud (klik terus papar model). Item DENGAN subItems
-// jadi folder navigasi - klik buka/tutup senarai anaknya (indent, garis
-// putus-putus) sebaris; klik salah satu anak barulah papar model.
-function renderItemPicker(){
-  itemPicker.innerHTML = "";
-  bundle.items.forEach((item) => {
-    const hasChildren = item.subItems && item.subItems.length > 0;
-    const b = document.createElement("button");
-    b.textContent = (hasChildren ? (expandedParentId === item.item_id ? "▾ " : "▸ ") : "") + item.title;
-    if (hasChildren) {
-      if (expandedParentId === item.item_id) b.classList.add("active");
-    } else if (currentItem && currentItem.item_id === item.item_id && currentMode === "3d") {
-      b.classList.add("active");
-    }
-    b.addEventListener("click", () => {
-      if (hasChildren) {
-        expandedParentId = (expandedParentId === item.item_id) ? null : item.item_id;
-        renderItemPicker();
-        return;
-      }
-      currentItem = item;
-      renderItemPicker();
-      if (currentMode === "3d") load3D(true);
-    });
-    itemPicker.appendChild(b);
+// Satu butang tunggal - tekan untuk buka/tutup senarai penuh. Item DENGAN
+// subItems dipaparkan sebagai label kumpulan (tak boleh klik) dengan
+// anak-anaknya disenaraikan terindent di bawahnya; item TANPA subItems
+// terus jadi baris yang boleh diklik. Klik mana-mana baris pilih item itu
+// terus (papar model) dan tutup senarai.
+function selectItem(item){
+  currentItem = item;
+  closeItemMenu();
+  renderItemPicker();
+  if (currentMode === "3d") load3D(true);
+}
 
-    if (hasChildren && expandedParentId === item.item_id) {
+function openItemMenu(){ itemSelect.classList.add("open"); }
+function closeItemMenu(){ itemSelect.classList.remove("open"); }
+function toggleItemMenu(){ itemSelect.classList.toggle("open"); }
+
+itemSelectToggle.addEventListener("click", (ev) => { ev.stopPropagation(); toggleItemMenu(); });
+document.addEventListener("click", (ev) => {
+  if (!itemSelect.contains(ev.target)) closeItemMenu();
+});
+
+function renderItemPicker(){
+  itemSelectCurrent.textContent = currentItem ? currentItem.title : "Pilih item";
+  itemSelectMenu.innerHTML = "";
+  bundle.items.forEach((item, idx) => {
+    const hasChildren = item.subItems && item.subItems.length > 0;
+    if (idx > 0) itemSelectMenu.appendChild(document.createElement("div")).className = "divider";
+
+    if (hasChildren) {
+      const label = document.createElement("p");
+      label.className = "group-label";
+      label.textContent = item.title;
+      itemSelectMenu.appendChild(label);
       item.subItems.forEach(sub => {
         const sb = document.createElement("button");
+        sb.type = "button";
+        sb.className = "item-row sub";
         sb.textContent = sub.title;
-        sb.classList.add("sub-item-btn");
         if (currentItem && currentItem.item_id === sub.item_id && currentMode === "3d") sb.classList.add("active");
-        sb.addEventListener("click", () => {
-          currentItem = sub;
-          renderItemPicker();
-          if (currentMode === "3d") load3D(true);
-        });
-        itemPicker.appendChild(sb);
+        sb.addEventListener("click", () => selectItem(sub));
+        itemSelectMenu.appendChild(sb);
       });
+    } else {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "item-row";
+      b.textContent = item.title;
+      if (currentItem && currentItem.item_id === item.item_id && currentMode === "3d") b.classList.add("active");
+      b.addEventListener("click", () => selectItem(item));
+      itemSelectMenu.appendChild(b);
     }
   });
-  itemPicker.style.display = currentMode === "3d" ? "flex" : "none";
+  itemSelect.style.display = currentMode === "3d" ? "block" : "none";
 }
 
 function statusTextFor(item){
@@ -231,7 +267,8 @@ function load3D(preserveInfoPanel){
   hudTitle.textContent = currentItem.title;
   hudStatusText.textContent = statusTextFor(currentItem);
   threeSession = start3DViewer(document.getElementById("stage"), currentItem, {
-    onHotspotClick: showHotspot
+    onHotspotClick: showHotspot,
+    lighting: lightingCfg
   });
   updateYoutubeButton(currentItem);
   if (preserveInfoPanel && infoPanel.classList.contains("show")) renderItemInfo(currentItem);
@@ -255,6 +292,7 @@ async function loadAR(){
     },
     onTargetLost: () => { hudStatusText.textContent = "Cari kad…"; },
     onHotspotClick: showHotspot,
+    lighting: lightingCfg,
     onError: (err) => {
       console.error(err);
       hudStatusText.textContent = "AR gagal — kembali ke Mod 3D";
@@ -274,6 +312,7 @@ function switchMode(mode){
     btn3d.classList.add("active"); btnAr.classList.remove("active");
     toastAr.style.display = "none";
     currentMode = "3d";
+    viewerWrap.classList.add("mode-3d"); viewerWrap.classList.remove("mode-ar");
     renderItemPicker();
     load3D();
   } else {
@@ -282,6 +321,7 @@ function switchMode(mode){
     document.getElementById("ar-container").style.display = "block";
     btnAr.classList.add("active"); btn3d.classList.remove("active");
     currentMode = "ar";
+    viewerWrap.classList.add("mode-ar"); viewerWrap.classList.remove("mode-3d");
     renderItemPicker();
     hudTitle.textContent = "Cari sebarang kad…";
     toastAr.style.display = "block";
@@ -293,10 +333,20 @@ btnAr.addEventListener("click", () => switchMode("ar"));
 document.getElementById("toast-ar-close").addEventListener("click", () => { toastAr.style.display = "none"; loadAR(); });
 
 async function boot(){
+  viewerWrap.classList.add("mode-3d"); // lalai Mod 3D - sorok pill tajuk berulang dari mula
   if (!topicId || !apiConfigured()){
     hudTitle.textContent = "Ralat konfigurasi";
     hudStatusText.textContent = !topicId ? "Topik tiada dalam URL" : "API belum disambung";
     return;
+  }
+  // Tetapan Pencahayaan (Sheet "Settings") - PILIHAN. Kalau Sheet lama belum
+  // ada baris ini lagi, atau panggilan gagal, guna DEFAULT_LIGHTING senyap-
+  // senyap (jangan biar seluruh halaman gagal boot sebab satu ciri kecil).
+  try {
+    const settingsRows = await Api.getSettings();
+    lightingCfg = mergeLighting(settingsRows && settingsRows[0]);
+  } catch (err) {
+    lightingCfg = DEFAULT_LIGHTING;
   }
   try {
     bundle = await Api.getTopicBundle(topicId);
@@ -308,10 +358,6 @@ async function boot(){
     }
     document.title = bundle.topic.title;
     currentItem = leafItems[0];
-    // kalau leaf pertama tu sebenarnya sub-item, buka terus induknya supaya
-    // picker tak nampak "kosong" (tiada apa ditanda aktif) pada mulanya.
-    const parentOfFirst = bundle.items.find(it => it.subItems && it.subItems.some(s => s.item_id === currentItem.item_id));
-    if (parentOfFirst) expandedParentId = parentOfFirst.item_id;
     renderItemPicker();
     load3D();
   } catch (err) {

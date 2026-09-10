@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>Kuiz — Kad AR Kimpalan</title>
+<title>Kuiz — ARClass</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../shared/css/style.css">
 
 <script type="importmap">
@@ -21,6 +21,8 @@
 <script src="https://cdn.jsdelivr.net/gh/damianofalcioni/js-aruco2@master/src/aruco.js"></script>
 <script src="https://cdn.jsdelivr.net/gh/damianofalcioni/js-aruco2@master/src/svd.js"></script>
 <script src="https://cdn.jsdelivr.net/gh/damianofalcioni/js-aruco2@master/src/posit1.js"></script>
+<!-- OpenCV.js: optical-flow / feature tracking for marker-assisted AR -->
+<script async src="https://docs.opencv.org/4.x/opencv.js"></script>
 </head>
 <body class="viewer">
 
@@ -29,7 +31,7 @@
   <!-- ===== SKRIN 1: isi nama ===== -->
   <div class="score-screen" id="screen-identify">
     <div class="score-box">
-      <p class="eyebrow" style="color:var(--arc);">Kuiz</p>
+      <p class="eyebrow" style="color:var(--arc-ink);">Kuiz</p>
       <h1 id="identify-topic-title" style="font-size:24px;margin-bottom:18px;">Memuatkan…</h1>
       <form id="identify-form" style="text-align:left;">
         <label for="f-nama">Nama</label>
@@ -49,9 +51,9 @@
   <!-- ===== SKRIN 2: intro topik ===== -->
   <div class="score-screen" id="screen-intro" style="display:none;">
     <div class="score-box">
-      <p class="eyebrow" style="color:var(--arc);">Sedia?</p>
+      <p class="eyebrow" style="color:var(--arc-ink);">Sedia?</p>
       <h1 id="intro-title" style="font-size:22px;margin:8px 0 12px;">—</h1>
-      <p style="font-size:13px;color:var(--text-dim);line-height:1.7;margin-bottom:22px;" id="intro-desc">
+      <p style="font-size:13px;color:var(--ink-dim);line-height:1.7;margin-bottom:22px;" id="intro-desc">
         Kamu akan diminta cari item tertentu guna kamera. Bila jumpa, tekan "Ini Dia!" untuk sahkan,
         kemudian jawab satu soalan pendek. Setiap item bernilai 2 markah.
       </p>
@@ -64,8 +66,8 @@
     <div id="ar-container" style="position:absolute;inset:0;"></div>
 
     <div class="hud-top">
-      <div class="title" id="hud-progress">Item 1/1</div>
       <a class="back" href="index.html">✕ Keluar</a>
+      <div class="title" id="hud-progress">Item 1/1</div>
     </div>
 
     <div class="quiz-target-banner" id="target-banner">
@@ -91,9 +93,9 @@
   <!-- ===== SKRIN 4: keputusan ===== -->
   <div class="score-screen" id="screen-result" style="display:none;">
     <div class="score-box">
-      <p class="eyebrow" style="color:var(--arc);">Selesai!</p>
+      <p class="eyebrow" style="color:var(--arc-ink);">Selesai!</p>
       <div class="score-num" id="result-score">0/0</div>
-      <p style="font-size:13px;color:var(--text-dim);margin-bottom:24px;" id="result-percent">0%</p>
+      <p style="font-size:13px;color:var(--ink-dim);margin-bottom:24px;" id="result-percent">0%</p>
       <a class="btn block" id="btn-leaderboard" style="margin-bottom:10px;">Lihat Papan Pendahulu</a>
       <a class="btn ghost block" href="index.html">Kembali ke Senarai Topik</a>
     </div>
@@ -104,10 +106,11 @@
 <script src="../shared/js/api.js"></script>
 <script src="../shared/js/models.js"></script>
 <script type="module">
-import { startARViewer, flattenLeafItems } from "../shared/js/ar-core.js";
+import { startARViewer, flattenLeafItems, DEFAULT_LIGHTING, mergeLighting } from "../shared/js/ar-core.js";
 
 const params = new URLSearchParams(location.search);
 const topicId = params.get("topic");
+let lightingCfg = DEFAULT_LIGHTING;
 
 const screenIdentify = document.getElementById("screen-identify");
 const screenIntro = document.getElementById("screen-intro");
@@ -176,6 +179,7 @@ async function startQuizSession(){
   arSession = await startARViewer(document.getElementById("ar-container"), topicId, leafItems, {
     onTargetFound: (item) => { visibleItemIds.add(item.item_id); updateConfirmState(); },
     onTargetLost: (item) => { visibleItemIds.delete(item.item_id); updateConfirmState(); },
+    lighting: lightingCfg,
     onError: (err) => {
       console.error(err);
       hudStatusText.textContent = "AR gagal dimuat — semak kebenaran kamera & sambungan internet";
@@ -317,13 +321,19 @@ async function boot(){
     return;
   }
   try {
+    const settingsRows = await Api.getSettings();
+    lightingCfg = mergeLighting(settingsRows && settingsRows[0]);
+  } catch (err) {
+    lightingCfg = DEFAULT_LIGHTING;
+  }
+  try {
     bundle = await Api.getTopicBundle(topicId);
     leafItems = flattenLeafItems(bundle.items);
     document.title = "Kuiz — " + bundle.topic.title;
     document.getElementById("identify-topic-title").textContent = bundle.topic.title;
     document.getElementById("intro-title").textContent = bundle.topic.title;
     document.getElementById("intro-desc").innerHTML =
-      `Kamu akan diminta cari <strong style="color:var(--text);">${leafItems.length} item</strong> guna kamera. ` +
+      `Kamu akan diminta cari <strong style="color:var(--ink);">${leafItems.length} item</strong> guna kamera. ` +
       `Bila jumpa, tekan "Ini Dia!" untuk sahkan, kemudian jawab satu soalan pendek. Setiap item bernilai 2 markah.`;
   } catch (err) {
     document.getElementById("identify-topic-title").textContent = "Ralat: " + err.message;
