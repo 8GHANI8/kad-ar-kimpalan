@@ -39,28 +39,23 @@ window.ROOT_BASE_URL = new URL("../../", import.meta.url).href;
 
 // Satu "unit" saiz penanda = 1 unit skala Three.js (bukan mm sebenar) -
 // ini elak keperluan ukur kad sebenar. MODEL_SCALE ialah default awal sahaja -
-// boleh dilaraskan LIVE guna slider dalam panel "Debug AR" (cubit skrin pun
-// boleh - lihat pinch-to-zoom di bawah), nilai tersimpan automatik.
+// boleh dilaraskan LIVE guna cubit skrin (pinch-to-zoom, lihat di bawah),
+// nilai tersimpan automatik.
 const MARKER_UNIT_SIZE = 1;
 const DEFAULT_MODEL_SCALE = 2.2;
 const LOST_GRACE_FRAMES = 5; // toleransi bingkai hilang sebelum model disorokkan (elak kelipan)
 
-// Penukaran paksi pose (posit -> Three.js) kini betul secara matematik dan
-// TAK PERLU dilaraskan manual (lihat poseToQuatPos di bawah). Yang mungkin
-// perlu dilaraskan cuma "arah model" (yawSteps) - model authored boleh jadi
-// menghadap arah lain berbanding kad, jadi admin/pelajar boleh putar 90°
-// sedikit demi sedikit (bukan cuma "songsang 180°" macam dahulu) sehingga
-// model betul-betul menghadap depan di atas kad.
-function loadYawSteps(){
-  const saved = parseInt(localStorage.getItem("arYawSteps"), 10);
-  if (!isNaN(saved)) return ((saved % 4) + 4) % 4;
-  // keserasian ke belakang: kit lama simpan suis 180° sahaja ("arFacing180")
-  if (localStorage.getItem("arFacing180") === "1") return 2;
-  return 0;
-}
-function saveYawSteps(v){
-  localStorage.setItem("arYawSteps", String(((v % 4) + 4) % 4));
-}
+// Kedudukan MULA model di atas kad AR (sebelum sebarang putaran jari).
+// Model authored asalnya menghadap/terbaring arah lain berbanding kad - jadi
+// dua "offset tetap" disediakan supaya betul sebaik kad dikesan, tiada
+// panel/suis diperlukan, cuma tukar nombor terus di sini:
+//   BASE_YAW_STEPS   - putar keliling paksi TEGAK (macam piring giring) -
+//                       tukar arah mana MODEL MENGHADAP (depan/kiri/belakang/kanan)
+//   BASE_PITCH_STEPS - condong ke depan/belakang (macam angguk kepala) -
+//                       tukar sama ada model BERDIRI atau TERBARING
+// Kedua-dua dalam unit suku-pusingan: 0=0°, 1=90°, 2=180°, 3=-90°.
+const BASE_YAW_STEPS = 0;
+const BASE_PITCH_STEPS = 1; // 1 x 90°
 function loadModelScale(){
   const saved = parseFloat(localStorage.getItem("arModelScale"));
   return isNaN(saved) ? DEFAULT_MODEL_SCALE : saved;
@@ -314,13 +309,15 @@ function makeRaycastHandler(camera, getMeshMap, onHit){
 }
 
 // ==================== 3D MODE (no camera) ====================
-// Butang ▶ MAIN / ⏸ JEDA yang sama dipakai dalam Mod 3D dan Mod AR - main
+// Butang ▶ PLAY / ⏸ PAUSE yang sama dipakai dalam Mod 3D dan Mod AR - main
 // perlu ditekan pengguna (Bahagian H: jangan andaikan autoplay bunyi
-// berfungsi di telefon).
+// berfungsi di telefon). z-index (4) sengaja LEBIH RENDAH dari panel info/
+// hotspot (.hotspot-panel, z-index:6 dalam style.css) - bila panel "Keterangan
+// Item" terbuka, ia melitupi butang ini (bukan sebaliknya).
 function attachVideoPlayButton(container, video, style){
   const btn = document.createElement("button");
-  btn.textContent = "▶ MAIN";
-  btn.style.cssText = style || "position:absolute;bottom:80px;left:50%;transform:translateX(-50%);z-index:20;font-family:monospace;font-weight:600;font-size:13px;padding:10px 18px;background:#ff7a1a;color:#111;border:none;border-radius:24px;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.5);";
+  btn.textContent = "▶ PLAY";
+  btn.style.cssText = style || "position:absolute;bottom:80px;left:50%;transform:translateX(-50%);z-index:4;font-family:monospace;font-weight:600;font-size:13px;padding:10px 18px;background:#ff7a1a;color:#111;border:none;border-radius:24px;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.5);";
   container.appendChild(btn);
   btn.addEventListener("click", () => {
     if (video.paused) {
@@ -330,9 +327,9 @@ function attachVideoPlayButton(container, video, style){
       // disekat oleh dasar autoplay kebanyakan browser mobile.
       video.muted = false;
       video.play();
-      btn.textContent = "⏸ JEDA";
+      btn.textContent = "⏸ PAUSE";
     }
-    else { video.pause(); btn.textContent = "▶ MAIN"; }
+    else { video.pause(); btn.textContent = "▶ PLAY"; }
   });
   return btn;
 }
@@ -681,83 +678,26 @@ function poseToQuatPos(rotation, translation){
   return { q, p };
 }
 
-function buildDebugPanel(container, initialScale, onScaleChange, initialYawSteps, onYawChange){
-  // diletak di kiri-atas, kawasan yang KOSONG semasa mod AR (item-picker
-  // hanya papar dalam mod 3D, target-banner kuiz di tengah) - dan diberi
-  // gaya paling menonjol (latar oren pejal) supaya mustahil terlepas pandang.
-  const btn = document.createElement("button");
-  btn.textContent = "⚙ LARAS AR";
-  btn.style.cssText = "position:absolute;top:56px;left:14px;z-index:50;font-family:monospace;font-weight:600;font-size:13px;padding:10px 16px;background:#ff7a1a;color:#111;border:none;border-radius:24px;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.5);";
-  const panel = document.createElement("div");
-  panel.style.cssText = "position:absolute;top:152px;left:14px;z-index:50;background:rgba(10,10,11,.97);border:2px solid #ff7a1a;border-radius:6px;padding:14px 16px;display:none;font-family:monospace;font-size:12px;color:#f2f1ee;min-width:200px;box-shadow:0 4px 16px rgba(0,0,0,.6);";
-  panel.innerHTML = `
-    <div style="color:#ff7a1a;text-transform:uppercase;font-size:11px;letter-spacing:.08em;margin-bottom:10px;">Saiz Model</div>
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
-      <button id="scale-down" style="flex:0 0 auto;font-size:16px;width:32px;height:32px;background:#232326;color:#f2f1ee;border:1px solid #333;border-radius:4px;cursor:pointer;">−</button>
-      <span id="scale-value" style="flex:1;text-align:center;">1.5x</span>
-      <button id="scale-up" style="flex:0 0 auto;font-size:16px;width:32px;height:32px;background:#232326;color:#f2f1ee;border:1px solid #333;border-radius:4px;cursor:pointer;">+</button>
-    </div>
-    <p style="font-size:10px;color:#a8a8ac;margin:0 0 12px;">Atau cubit dua jari terus atas skrin (dua jari juga boleh seret untuk gerak model).</p>
-    <div style="color:#ff7a1a;text-transform:uppercase;font-size:11px;letter-spacing:.08em;margin-bottom:8px;">Arah Model (putar 90° setiap tekan)</div>
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-      <button id="yaw-left" style="flex:0 0 auto;font-size:15px;width:36px;height:32px;background:#232326;color:#f2f1ee;border:1px solid #333;border-radius:4px;cursor:pointer;">↺90°</button>
-      <span id="yaw-value" style="flex:1;text-align:center;">0°</span>
-      <button id="yaw-right" style="flex:0 0 auto;font-size:15px;width:36px;height:32px;background:#232326;color:#f2f1ee;border:1px solid #333;border-radius:4px;cursor:pointer;">90°↻</button>
-    </div>
-    <p style="font-size:10px;color:#a8a8ac;margin:8px 0 0;line-height:1.5;">Tekan sehingga model betul-betul menghadap depan di atas kad. Nilai ini disimpan &amp; terpakai untuk SEMUA item topik ini.</p>
-    <p style="font-size:10px;color:#a8a8ac;margin:10px 0 0;line-height:1.5;border-top:1px solid #333;padding-top:10px;">Seret SATU jari atas model = pusing bebas. Seret DUA jari = gerak (pan) model.</p>
-    <p style="font-size:10px;color:#a8a8ac;margin:10px 0 0;line-height:1.5;border-top:1px solid #333;padding-top:10px;">Model SUDAH auto-ikut kad setiap masa secara lalai (gerak/putar kad, model turut sama). Tekan butang <strong style="color:#3ecf8e;">🔒 BEKU</strong> hanya kalau nak model kekal diam di skrin buat sementara (contohnya nak letak kad, lepas tangan) - tekan sekali lagi untuk sambung ikut kad semula.</p>
-  `;
-  container.appendChild(btn);
-  container.appendChild(panel);
-  btn.addEventListener("click", () => { panel.style.display = panel.style.display === "none" ? "block" : "none"; });
-
-  const yawValueEl = panel.querySelector("#yaw-value");
-  let yawSteps = ((initialYawSteps % 4) + 4) % 4;
-  function refreshYawLabel(){ yawValueEl.textContent = (yawSteps * 90) + "°"; }
-  refreshYawLabel();
-  panel.querySelector("#yaw-left").addEventListener("click", () => {
-    yawSteps = ((yawSteps - 1) % 4 + 4) % 4; refreshYawLabel(); onYawChange(yawSteps);
-  });
-  panel.querySelector("#yaw-right").addEventListener("click", () => {
-    yawSteps = (yawSteps + 1) % 4; refreshYawLabel(); onYawChange(yawSteps);
-  });
-
-  const scaleValueEl = panel.querySelector("#scale-value");
-  function refreshScaleLabel(v){ scaleValueEl.textContent = v.toFixed(1) + "x"; }
-  refreshScaleLabel(initialScale);
-  panel.querySelector("#scale-down").addEventListener("click", () => {
-    const v = Math.max(0.3, (parseFloat(scaleValueEl.textContent) || initialScale) - 0.2);
-    refreshScaleLabel(v); onScaleChange(v);
-  });
-  panel.querySelector("#scale-up").addEventListener("click", () => {
-    const v = Math.min(6, (parseFloat(scaleValueEl.textContent) || initialScale) + 0.2);
-    refreshScaleLabel(v); onScaleChange(v);
-  });
-
-  return { btn, panel, refreshScaleLabel };
-}
-
-// "Kunci"/lock di sini bermaksud BEKUKAN pose semasa (untuk letak kad turun,
-// lepas tangan tanpa model terlari) - BUKAN "lekat kuat pada kad". Ikut-kad
-// (auto-tracking) ialah TINGKAH LAKU LALAI sepanjang masa model kelihatan -
-// tak perlu tekan apa-apa untuk itu; lock cuma jeda/freeze ia buat sementara.
+// "Kunci"/BEKU di sini bermaksud: model TERUS ikut kedudukan & putaran kad
+// sebenar (sama macam lalai - TIDAK dibekukan diam di skrin), tapi putaran
+// jari (seret satu jari) DIMATIKAN - satu-satunya cara putar model ialah
+// putar kad secara fizikal. Cubit dua jari (zoom/skala) & seret dua jari
+// (pan) kekal berfungsi dalam kedua-dua keadaan.
 function buildLockButton(container, getLocked, setLocked){
   const btn = document.createElement("button");
   function render(){
     const on = getLocked();
-    btn.textContent = on ? "🔒 BEKU" : "🔓 AUTO-IKUT KAD";
+    btn.textContent = on ? "🔒 BEKU (putar guna kad)" : "🔓 AUTO-IKUT KAD";
     btn.style.background = on ? "#3ecf8e" : "rgba(0,0,0,.6)";
     btn.style.color = on ? "#111" : "#f2f1ee";
     btn.style.borderColor = on ? "#3ecf8e" : "#333";
   }
-  btn.style.cssText = "position:absolute;top:104px;left:14px;z-index:50;font-family:monospace;font-weight:600;font-size:12px;padding:9px 14px;border:1px solid #333;border-radius:24px;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.5);";
+  btn.style.cssText = "position:absolute;top:56px;left:14px;z-index:50;font-family:monospace;font-weight:600;font-size:12px;padding:10px 14px;border:1px solid #333;border-radius:24px;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.5);";
   render();
   container.appendChild(btn);
   btn.addEventListener("click", () => { setLocked(!getLocked()); render(); });
   return btn;
 }
-
 
 // ============================================================================
 // MARKER-ASSISTED OPTICAL FLOW
@@ -988,8 +928,9 @@ export async function startARViewer(container, topicId, items, {
     video.addEventListener("loadedmetadata", res, { once: true });
   });
 
-  // OpenCV.js is optional for graceful fallback, but wait briefly so the
-  // optical-flow tracker is normally ready before the first AR frame.
+  // OpenCV.js is loaded by learn.html/quiz.html. Wait briefly so optical-flow
+  // tracking is ready before the first AR frame; if it is unavailable, fall
+  // back automatically to the existing ArUco-only tracker.
   const opticalFlowAvailable = await waitForOpenCV(8000);
   if (!opticalFlowAvailable) {
     console.warn("OpenCV.js tidak siap; AR akan guna ArUco sahaja.");
@@ -1023,17 +964,17 @@ export async function startARViewer(container, topicId, items, {
   const allHotspotMeshes = [];
   const lostCounters = {};
   const wasVisible = {};
-  const smoothedQuat = {}; // item_id -> THREE.Quaternion (pose halus, dikemaskini setiap bingkai bila tak locked)
+  const smoothedQuat = {}; // item_id -> THREE.Quaternion (pose halus, dikemaskini setiap bingkai)
   const smoothedPos = {};  // item_id -> THREE.Vector3
   const flowStates = {};    // item_id -> marker-assisted optical-flow state
   const SMOOTH_ALPHA = 0.35; // 0=beku sepenuhnya, 1=ikut mentah (bergegar). 0.35 = seimbang.
   let currentModelScale = loadModelScale();
   let locked = false;
-  let yawSteps = loadYawSteps();
 
   // offset putaran manual (drag jari) + pan (seret dua jari) - dilapis ATAS
   // orientasi kad, jadi pelajar boleh laras model dengan jari tanpa perlu
-  // gerak kad fizikal.
+  // gerak kad fizikal. DIMATIKAN (yaw/pitch dibeku pada 0) bila locked=true -
+  // lihat buildLockButton() di bawah.
   const dragRotation = { yaw: 0, pitch: 0 };
   const panOffset = new THREE.Vector3(0, 0, 0);
   const scaleV = new THREE.Vector3();
@@ -1062,8 +1003,8 @@ export async function startARViewer(container, topicId, items, {
   function buildFinalMatrix(quat, pos){
     const finalQuat = quat.clone().multiply(
       new THREE.Quaternion().setFromEuler(new THREE.Euler(
-        dragRotation.pitch,
-        dragRotation.yaw + yawSteps * (Math.PI / 2),
+        dragRotation.pitch + BASE_PITCH_STEPS * (Math.PI / 2),
+        dragRotation.yaw + BASE_YAW_STEPS * (Math.PI / 2),
         0
       ))
     );
@@ -1075,10 +1016,10 @@ export async function startARViewer(container, topicId, items, {
     );
   }
 
-  const debugPanel = buildDebugPanel(container, currentModelScale, applyModelScale, yawSteps, (v) => {
-    yawSteps = v; saveYawSteps(v);
+  const lockBtn = buildLockButton(container, () => locked, (v) => {
+    locked = v;
+    if (locked) { dragRotation.yaw = 0; dragRotation.pitch = 0; } // pulang ke kedudukan MULA bila dikunci
   });
-  const lockBtn = buildLockButton(container, () => locked, (v) => { locked = v; });
 
   // ============ isyarat sentuh: 1 jari=putar/ketik, 2 jari=cubit(zoom)+seret(pan) ============
   let pinchStartDist = null;
@@ -1108,8 +1049,13 @@ export async function startARViewer(container, topicId, items, {
     const dx = x - drag.lastX, dy = y - drag.lastY;
     if (!drag.moved && Math.hypot(x - drag.startX, y - drag.startY) > DRAG_THRESHOLD) drag.moved = true;
     if (drag.moved) {
-      dragRotation.yaw += dx * ROTATE_SENSITIVITY;
-      dragRotation.pitch += dy * ROTATE_SENSITIVITY;
+      // bila locked, seretan SATU jari tak lagi putar model (putaran cuma
+      // boleh datang dari kad fizikal) - tapi gerakan masih dijejak supaya
+      // ketik hotspot (drag.moved=false) vs seret sengaja tetap dibezakan betul.
+      if (!locked) {
+        dragRotation.yaw += dx * ROTATE_SENSITIVITY;
+        dragRotation.pitch += dy * ROTATE_SENSITIVITY;
+      }
       drag.lastX = x; drag.lastY = y;
     }
   }
@@ -1134,7 +1080,6 @@ export async function startARViewer(container, topicId, items, {
         return;
       }
       applyModelScale(pinchStartScale * (dist / pinchStartDist));
-      debugPanel.refreshScaleLabel(currentModelScale);
       panOffset.x += (mid.x - panStartMid.x) * PAN_SENSITIVITY;
       panOffset.y -= (mid.y - panStartMid.y) * PAN_SENSITIVITY;
       panStartMid = mid;
@@ -1152,7 +1097,6 @@ export async function startARViewer(container, topicId, items, {
   container.addEventListener("wheel", (ev) => {
     ev.preventDefault();
     applyModelScale(currentModelScale - ev.deltaY * 0.0015);
-    debugPanel.refreshScaleLabel(currentModelScale);
   }, { passive: false });
 
   container.style.touchAction = "none";
@@ -1169,7 +1113,7 @@ export async function startARViewer(container, topicId, items, {
   function showVideoControls(item, videoEl){
     activeVideoItemId = item.item_id;
     if (!videoPlayBtn) {
-      videoPlayBtn = attachVideoPlayButton(container, videoEl, "position:absolute;bottom:150px;left:50%;transform:translateX(-50%);z-index:20;font-family:monospace;font-weight:600;font-size:13px;padding:10px 18px;background:#ff7a1a;color:#111;border:none;border-radius:24px;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.5);");
+      videoPlayBtn = attachVideoPlayButton(container, videoEl, "position:absolute;bottom:150px;left:50%;transform:translateX(-50%);z-index:4;font-family:monospace;font-weight:600;font-size:13px;padding:10px 18px;background:#ff7a1a;color:#111;border:none;border-radius:24px;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.5);");
     } else {
       // butang sedia ada - tukar video yang dikawalnya kepada kad BARU
       // dikesan (buang & bina semula listener supaya tak terlekat pada
@@ -1177,10 +1121,10 @@ export async function startARViewer(container, topicId, items, {
       const fresh = videoPlayBtn.cloneNode(true);
       videoPlayBtn.replaceWith(fresh);
       videoPlayBtn = fresh;
-      videoPlayBtn.textContent = "▶ MAIN";
+      videoPlayBtn.textContent = "▶ PLAY";
       videoPlayBtn.addEventListener("click", () => {
-        if (videoEl.paused) { videoEl.muted = false; videoEl.play(); videoPlayBtn.textContent = "⏸ JEDA"; }
-        else { videoEl.pause(); videoPlayBtn.textContent = "▶ MAIN"; }
+        if (videoEl.paused) { videoEl.muted = false; videoEl.play(); videoPlayBtn.textContent = "⏸ PAUSE"; }
+        else { videoEl.pause(); videoPlayBtn.textContent = "▶ PLAY"; }
       });
     }
     videoPlayBtn.style.display = "block";
@@ -1200,18 +1144,25 @@ export async function startARViewer(container, topicId, items, {
     dctx.drawImage(video, 0, 0, dw, dh);
     const imageData = dctx.getImageData(0, 0, dw, dh);
     const markers = detector.detect(imageData);
-    let grayFrame = null;
-    if (opticalFlowAvailable && cvReady()) {
-      try { grayFrame = imageToGrayMat(imageData); }
-      catch (err) { console.warn("OpenCV frame conversion failed:", err); }
-    }
     const seenIds = new Set();
 
-    // 1) ArUco is the authoritative pose source whenever it is visible.
+    // Optical-flow uses a grayscale copy of the same camera frame. It is
+    // deliberately optional: if OpenCV.js is unavailable, the old ArUco-only
+    // path below still works exactly as before.
+    let grayFrame = null;
+    if (opticalFlowAvailable && cvReady()) {
+      try {
+        grayFrame = imageToGrayMat(imageData);
+      } catch (err) {
+        console.warn("OpenCV frame conversion failed:", err);
+      }
+    }
+
+    // 1) ArUco is the authoritative source whenever the marker is visible.
     markers.forEach(marker => {
       seenIds.add(marker.id);
       const entry = groupsByMarkerId[marker.id];
-      if (!entry) return;
+      if (!entry) return; // penanda dikesan tapi tiada item dikaitkan dengannya
 
       const corners = marker.corners.map(c => ({
         x: c.x - dw/2,
@@ -1220,73 +1171,91 @@ export async function startARViewer(container, topicId, items, {
       const pose = posit.pose(corners);
       if (!pose) return;
 
-      const { q:rawQ, p:rawP } = poseToQuatPos(pose.bestRotation, pose.bestTranslation);
-      const id=entry.item.item_id;
-      const flow=flowStates[id];
+      const { q: rawQ, p: rawP } = poseToQuatPos(pose.bestRotation, pose.bestTranslation);
+      const id = entry.item.item_id;
+      const flow = flowStates[id];
 
       if (!smoothedQuat[id]) {
-        smoothedQuat[id]=rawQ.clone();
-        smoothedPos[id]=rawP.clone();
-      } else if (!locked) {
-        smoothedQuat[id].slerp(rawQ,SMOOTH_ALPHA);
-        smoothedPos[id].lerp(rawP,SMOOTH_ALPHA);
+        // bingkai pertama kad ini dikesan - guna terus (tiada apa nak smooth lagi)
+        smoothedQuat[id] = rawQ.clone();
+        smoothedPos[id] = rawP.clone();
+      } else {
+        // Kekalkan smoothing asal ArUco.
+        smoothedQuat[id].slerp(rawQ, SMOOTH_ALPHA);
+        smoothedPos[id].lerp(rawP, SMOOTH_ALPHA);
       }
 
-      entry.group.matrix.copy(buildFinalMatrix(smoothedQuat[id],smoothedPos[id]));
-      entry.group.visible=true;
-      lostCounters[id]=0;
+      entry.group.matrix.copy(buildFinalMatrix(smoothedQuat[id], smoothedPos[id]));
+      entry.group.visible = true;
+      lostCounters[id] = 0;
 
-      // Seed/reseed visual tracking from a fresh ArUco frame.
-      if (cvReady() && grayFrame &&
-          (!flow.active || flow.lostFrames>0 || flow.framesSinceInit>=FLOW_REINIT_INTERVAL)) {
-        try { initFlowState(flow,grayFrame,marker); }
-        catch(err) { console.warn("Optical flow init failed:",err); destroyFlowState(flow); }
+      // Seed/reseed visual tracking from a fresh ArUco frame. We re-seed
+      // periodically while the marker is visible so the reference points stay
+      // healthy, but ArUco remains the authority for actual pose.
+      if (opticalFlowAvailable && cvReady() && grayFrame &&
+          (!flow.active || flow.lostFrames > 0 || flow.framesSinceInit >= FLOW_REINIT_INTERVAL)) {
+        try {
+          initFlowState(flow, grayFrame, marker);
+        } catch (err) {
+          console.warn("Optical flow init failed:", err);
+          destroyFlowState(flow);
+        }
       }
-      flow.lostFrames=0;
+      flow.lostFrames = 0;
 
       if (!wasVisible[id]) {
-        wasVisible[id]=true;
+        wasVisible[id] = true;
         onTargetFound && onTargetFound(entry.item);
-        if (entry.group.userData.isVideoPlane) showVideoControls(entry.item,entry.group.userData.video);
+        if (entry.group.userData.isVideoPlane) showVideoControls(entry.item, entry.group.userData.video);
       }
     });
 
-    // 2) ArUco disappeared: track the card artwork instead.
+    // 2) ArUco is temporarily missing: follow the visual features on the card.
+    // The tracker estimates a planar homography and moves the original marker
+    // corners through that homography, then feeds those corners through the
+    // same POSIT pose solver used by ArUco. This keeps the coordinate system
+    // identical to the existing renderer.
     if (opticalFlowAvailable && cvReady() && grayFrame) {
-      Object.values(groupsByMarkerId).forEach(({group,item}) => {
-        const id=item.item_id;
-        const flow=flowStates[id];
+      Object.values(groupsByMarkerId).forEach(({ group, item }) => {
+        const id = item.item_id;
+        const flow = flowStates[id];
         if (seenIds.has(Number(item.target_index)) || !flow.active || !wasVisible[id]) return;
 
-        const result=flowStep(flow,grayFrame);
+        const result = flowStep(flow, grayFrame);
         if (result && result.ok) {
-          flow.lostFrames=0;
-          const trackedCorners=result.markerCorners.map(c => ({
-            x:c.x-dw/2,
-            y:dh/2-c.y
+          flow.lostFrames = 0;
+          const trackedCorners = result.markerCorners.map(c => ({
+            x: c.x - dw/2,
+            y: dh/2 - c.y
           }));
-          const flowPose=posit.pose(trackedCorners);
+          const flowPose = posit.pose(trackedCorners);
 
           if (flowPose) {
-            const {q,p}=poseToQuatPos(flowPose.bestRotation,flowPose.bestTranslation);
+            const { q, p } = poseToQuatPos(flowPose.bestRotation, flowPose.bestTranslation);
+            // Lock still means freeze the model pose. Otherwise let the card
+            // tracker update the same smoothed pose used by ArUco.
             if (!locked) {
-              smoothedQuat[id].slerp(q,0.22);
-              smoothedPos[id].lerp(p,0.22);
-              group.matrix.copy(buildFinalMatrix(smoothedQuat[id],smoothedPos[id]));
+              smoothedQuat[id].slerp(q, 0.22);
+              smoothedPos[id].lerp(p, 0.22);
+              group.matrix.copy(buildFinalMatrix(smoothedQuat[id], smoothedPos[id]));
             }
-            group.visible=true;
-            lostCounters[id]=0;
+            group.visible = true;
+            lostCounters[id] = 0;
             return;
           }
         }
 
         flow.lostFrames++;
-        // Keep the last good pose during short tracking hiccups.
-        if (flow.lostFrames<=FLOW_MAX_LOST_FRAMES) {
-          group.visible=true;
-        } else if (wasVisible[id]) {
-          group.visible=false;
-          wasVisible[id]=false;
+
+        // A short tracking hiccup should not make the object disappear.
+        if (flow.lostFrames <= FLOW_MAX_LOST_FRAMES) {
+          group.visible = true;
+          return;
+        }
+
+        if (wasVisible[id]) {
+          group.visible = false;
+          wasVisible[id] = false;
           destroyFlowState(flow);
           onTargetLost && onTargetLost(item);
           if (group.userData.isVideoPlane && group.userData.video) {
@@ -1296,13 +1265,13 @@ export async function startARViewer(container, topicId, items, {
         }
       });
     } else {
-      // If OpenCV.js failed to load, preserve the old ArUco-only behavior.
-      Object.values(groupsByMarkerId).forEach(({group,item}) => {
+      // No OpenCV: preserve the original ArUco-only lost-frame behavior.
+      Object.values(groupsByMarkerId).forEach(({ group, item }) => {
         if (seenIds.has(Number(item.target_index))) return;
-        lostCounters[item.item_id]++;
-        if (lostCounters[item.item_id]>LOST_GRACE_FRAMES && wasVisible[item.item_id]) {
-          if (!locked) group.visible=false;
-          wasVisible[item.item_id]=false;
+        lostCounters[item.item_id] += 1;
+        if (lostCounters[item.item_id] > LOST_GRACE_FRAMES && wasVisible[item.item_id]) {
+          group.visible = false;
+          wasVisible[item.item_id] = false;
           onTargetLost && onTargetLost(item);
           if (group.userData.isVideoPlane && group.userData.video) {
             group.userData.video.pause();
@@ -1333,10 +1302,7 @@ export async function startARViewer(container, topicId, items, {
     stop(){
       running = false;
       stream.getTracks().forEach(t => t.stop());
-      Object.values(groupsByMarkerId).forEach(({ group, item }) => {
-        disposeVideo(group);
-        destroyFlowState(flowStates[item.item_id]);
-      });
+      Object.values(groupsByMarkerId).forEach(({ group }) => disposeVideo(group));
       window.removeEventListener("resize", onResize);
       container.innerHTML = "";
     }
