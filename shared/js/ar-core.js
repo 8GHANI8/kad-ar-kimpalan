@@ -44,6 +44,12 @@ window.ROOT_BASE_URL = new URL("../../", import.meta.url).href;
 const MARKER_UNIT_SIZE = 1;
 const DEFAULT_MODEL_SCALE = 2.2;
 const LOST_GRACE_FRAMES = 5; // toleransi bingkai hilang sebelum model disorokkan (elak kelipan)
+// Kelajuan putaran idle LALAI untuk model .glb sebenar (registerGLBModel
+// dalam models.js TAK PERNAH tetapkan userData.idleSpin sendiri - hanya
+// model placeholder kotak lama buat begitu) - tanpa nilai fallback ini,
+// suis "Putaran Automatik" dalam tab Pencahayaan admin tak beri apa-apa
+// kesan pada mana-mana model sebenar yang dah dimuatkan.
+const DEFAULT_IDLE_SPIN = 0.15;
 
 // Kedudukan MULA model di atas kad AR (sebelum sebarang putaran jari).
 // Model authored asalnya menghadap/terbaring arah lain berbanding kad - jadi
@@ -426,8 +432,8 @@ export function start3DViewer(container, item, { onHotspotClick, lighting } = {}
     const dt = clock.getDelta();
     const t = clock.elapsedTime;
     if (group) {
-      if (group.userData.idleSpin && lightingCfg.autorotate && !userInteracting && t > idleResumeAt) {
-        group.rotation.y += group.userData.idleSpin * dt;
+      if (lightingCfg.autorotate && !userInteracting && t > idleResumeAt) {
+        group.rotation.y += (group.userData.idleSpin || DEFAULT_IDLE_SPIN) * dt;
       }
       if (group.userData.flicker) group.userData.flicker.intensity = 1.1 + Math.sin(t*30)*0.15 + (Math.random()-0.5)*0.2;
       if (group.userData.mixer) group.userData.mixer.update(dt); // animasi .glb dari Blender (kalau ada)
