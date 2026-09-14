@@ -38,7 +38,7 @@
          3D ia disorokkan (lihat .viewer-wrap.mode-3d .hud-top .title dalam
          style.css) sebab item-select di bawah dah papar nama yang SAMA -
          dua pill bertindan menunjukkan info berulang tanpa sebab. -->
-    <div class="title" id="hud-title">Memuatkan…</div>
+    <div class="title" id="hud-title">Loading…</div>
   </div>
 
   <!-- Satu pill kolaps sahaja, di bawah butang "← Senarai" - tekan untuk buka
@@ -46,7 +46,7 @@
        sebab kad fizikal yang tentukan item, bukan pilihan manual). -->
   <div class="item-select" id="item-select">
     <button class="item-select-toggle" id="item-select-toggle" type="button">
-      <span id="item-select-current">Memuatkan…</span>
+      <span id="item-select-current">Loading…</span>
       <span class="chev">▾</span>
     </button>
     <div class="item-select-menu" id="item-select-menu"></div>
@@ -251,8 +251,8 @@ function renderItemPicker(){
 }
 
 function statusTextFor(item){
-  if (itemHasModel(item)) return "Mod 3D — putar & ketik bahagian oren";
-  if (itemHasVideo(item)) return "Video — tekan ▶ untuk main";
+  if (itemHasModel(item)) return "Mod 3D — putar & tekan bahagian oren";
+  if (itemHasVideo(item)) return "Video — tekan ▶ untuk PLAY";
   return "Tiada model/video untuk item ini";
 }
 
@@ -280,17 +280,17 @@ async function loadAR(){
   btnInfo.classList.remove("active");
   arCurrentItem = null;
   updateYoutubeButton(null);
-  hudStatusText.textContent = "Memulakan kamera…";
+  hudStatusText.textContent = "Loading kamera…";
   arSession = await startARViewer(document.getElementById("ar-container"), topicId, leafItems, {
     onTargetFound: (item) => {
       hudTitle.textContent = item.title;
-      hudStatusText.textContent = itemHasVideo(item) && !itemHasModel(item) ? "Kad dikesan ✓ — tekan ▶ untuk main" : "Kad dikesan ✓";
+      hudStatusText.textContent = itemHasVideo(item) && !itemHasModel(item) ? "Kad dikesan ✓ — tekan ▶ untuk PLAY" : "Kad dikesan ✓";
       arCurrentItem = item;
       updateYoutubeButton(item);
       // kalau panel keterangan sedang terbuka, kemaskini terus ikut kad baru
       if (infoPanel.classList.contains("show")) renderItemInfo(item);
     },
-    onTargetLost: () => { hudStatusText.textContent = "Cari kad…"; },
+    onTargetLost: () => { hudStatusText.textContent = "Scanning Kad…"; },
     onHotspotClick: showHotspot,
     lighting: lightingCfg,
     onError: (err) => {
@@ -299,7 +299,7 @@ async function loadAR(){
       switchMode("3d");
     }
   });
-  if (arSession) hudStatusText.textContent = "Cari kad…";
+  if (arSession) hudStatusText.textContent = "Scanning Kad…";
 }
 
 function switchMode(mode){
