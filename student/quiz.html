@@ -32,7 +32,7 @@
   <div class="score-screen" id="screen-identify">
     <div class="score-box">
       <p class="eyebrow" style="color:var(--arc-ink);">Kuiz</p>
-      <h1 id="identify-topic-title" style="font-size:24px;margin-bottom:18px;">Memuatkan…</h1>
+      <h1 id="identify-topic-title" style="font-size:24px;margin-bottom:18px;">Loading…</h1>
       <form id="identify-form" style="text-align:left;">
         <label for="f-nama">Nama</label>
         <input type="text" id="f-nama" placeholder="Nama penuh">
@@ -54,7 +54,7 @@
       <p class="eyebrow" style="color:var(--arc-ink);">Sedia?</p>
       <h1 id="intro-title" style="font-size:22px;margin:8px 0 12px;">—</h1>
       <p style="font-size:13px;color:var(--ink-dim);line-height:1.7;margin-bottom:22px;" id="intro-desc">
-        Kamu akan diminta cari item tertentu guna kamera. Bila jumpa, tekan "Ini Dia!" untuk sahkan,
+        Kamu akan diminta untuk mencari item tertentu menggunakan kamera. Bila jumpa, tekan "Ini Dia!" untuk sahkan,
         kemudian jawab satu soalan pendek. Setiap item bernilai 2 markah.
       </p>
       <button class="btn block" id="btn-start-quiz">Buka Kamera & Mula</button>
@@ -209,7 +209,7 @@ btnConfirm.addEventListener("click", () => {
     score += 1;
     askFollowUpQuestion(item);
   } else {
-    hudStatusText.textContent = "Bukan itu — cuba cari kad yang betul";
+    hudStatusText.textContent = "SALAH, CUBA LAGI — cuba cari kad yang betul";
     setTimeout(() => { if (arSession) hudStatusText.textContent = "Cari kad…"; }, 1600);
   }
 });
@@ -333,7 +333,7 @@ async function boot(){
     document.getElementById("identify-topic-title").textContent = bundle.topic.title;
     document.getElementById("intro-title").textContent = bundle.topic.title;
     document.getElementById("intro-desc").innerHTML =
-      `Kamu akan diminta cari <strong style="color:var(--ink);">${leafItems.length} item</strong> guna kamera. ` +
+      `Kamu akan diminta untuk mencari <strong style="color:var(--ink);">${leafItems.length} item</strong> terentu menggunakan kamera. ` +
       `Bila jumpa, tekan "Ini Dia!" untuk sahkan, kemudian jawab satu soalan pendek. Setiap item bernilai 2 markah.`;
   } catch (err) {
     document.getElementById("identify-topic-title").textContent = "Ralat: " + err.message;
