@@ -333,7 +333,7 @@ async function boot(){
     document.getElementById("identify-topic-title").textContent = bundle.topic.title;
     document.getElementById("intro-title").textContent = bundle.topic.title;
     document.getElementById("intro-desc").innerHTML =
-      `Kamu akan diminta untuk mencari <strong style="color:var(--ink);">${leafItems.length} item</strong> terentu menggunakan kamera. ` +
+      `Kamu akan diminta untuk mencari <strong style="color:var(--ink);">${leafItems.length} item</strong> tertentu menggunakan kamera. ` +
       `Bila jumpa, tekan "Ini Dia!" untuk sahkan, kemudian jawab satu soalan pendek. Setiap item bernilai 2 markah.`;
   } catch (err) {
     document.getElementById("identify-topic-title").textContent = "Ralat: " + err.message;
