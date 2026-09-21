@@ -901,7 +901,15 @@ export async function startARViewer(container, topicId, items, {
   onTargetLost,    // (item) => void
   onHotspotClick,  // (hit) => void
   onError,         // (err) => void
-  lighting         // tetapan Pencahayaan dari admin (Sheet "Settings")
+  lighting,        // tetapan Pencahayaan dari admin (Sheet "Settings")
+  // Mod Belajar (learn.html) sengaja biar model "bertahan" seketika bila kad
+  // tersembunyi sekejap (elak berkelip-kelip semasa terangkan/tunjuk kad) -
+  // guna fallback "optical flow" (OpenCV) + toleransi beberapa bingkai.
+  // Kuiz (quiz.html) pula perlukan status kad yang TEPAT sebab butang
+  // "Ini Dia!" bergantung terus padanya - hantar instantHide:true supaya
+  // model terus disorokkan SERTA-MERTA sebaik kad ArUco tak dikesan
+  // (tiada fallback optical flow, tiada toleransi bingkai langsung).
+  instantHide = false
 } = {}){
   const lightingCfg = lighting || DEFAULT_LIGHTING;
   if (typeof AR === "undefined" || typeof POS === "undefined") {
@@ -936,11 +944,16 @@ export async function startARViewer(container, topicId, items, {
 
   // OpenCV.js is loaded by learn.html/quiz.html. Wait briefly so optical-flow
   // tracking is ready before the first AR frame; if it is unavailable, fall
-  // back automatically to the existing ArUco-only tracker.
-  const opticalFlowAvailable = await waitForOpenCV(8000);
-  if (!opticalFlowAvailable) {
+  // back automatically to the existing ArUco-only tracker. instantHide skips
+  // this entirely (no wait, no fallback) - quiz.html wants an immediate
+  // "card gone" signal, not a forgiving one.
+  const opticalFlowAvailable = instantHide ? false : await waitForOpenCV(8000);
+  if (!opticalFlowAvailable && !instantHide) {
     console.warn("OpenCV.js tidak siap; AR akan guna ArUco sahaja.");
   }
+  // Bingkai toleransi sebelum model disorokkan bila kad tak dikesan - 0 bila
+  // instantHide (kuiz), atau LOST_GRACE_FRAMES seperti biasa (Mod Belajar).
+  const graceFrames = instantHide ? 0 : LOST_GRACE_FRAMES;
 
   const dw = video.videoWidth || 640, dh = video.videoHeight || 480;
   const detectionCanvas = document.createElement("canvas");
@@ -1275,7 +1288,7 @@ export async function startARViewer(container, topicId, items, {
       Object.values(groupsByMarkerId).forEach(({ group, item }) => {
         if (seenIds.has(Number(item.target_index))) return;
         lostCounters[item.item_id] += 1;
-        if (lostCounters[item.item_id] > LOST_GRACE_FRAMES && wasVisible[item.item_id]) {
+        if (lostCounters[item.item_id] > graceFrames && wasVisible[item.item_id]) {
           group.visible = false;
           wasVisible[item.item_id] = false;
           onTargetLost && onTargetLost(item);

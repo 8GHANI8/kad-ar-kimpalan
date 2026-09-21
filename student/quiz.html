@@ -21,8 +21,6 @@
 <script src="https://cdn.jsdelivr.net/gh/damianofalcioni/js-aruco2@master/src/aruco.js"></script>
 <script src="https://cdn.jsdelivr.net/gh/damianofalcioni/js-aruco2@master/src/svd.js"></script>
 <script src="https://cdn.jsdelivr.net/gh/damianofalcioni/js-aruco2@master/src/posit1.js"></script>
-<!-- OpenCV.js: optical-flow / feature tracking for marker-assisted AR -->
-<script async src="https://docs.opencv.org/4.x/opencv.js"></script>
 </head>
 <body class="viewer">
 
@@ -180,6 +178,7 @@ async function startQuizSession(){
     onTargetFound: (item) => { visibleItemIds.add(item.item_id); updateConfirmState(); },
     onTargetLost: (item) => { visibleItemIds.delete(item.item_id); updateConfirmState(); },
     lighting: lightingCfg,
+    instantHide: true, // kuiz perlukan status kad TEPAT - model hilang serta-merta bila kad tak nampak (tiada "bertahan" macam Mod Belajar)
     onError: (err) => {
       console.error(err);
       hudStatusText.textContent = "AR gagal dimuat — semak kebenaran kamera & sambungan internet";
