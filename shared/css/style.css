@@ -64,10 +64,18 @@ button, input, select, textarea{font-family:var(--sans);}
 }
 
 header.top{padding:34px 24px 22px;max-width:1080px;margin:0 auto;}
+/* Logo diletak KANAN, tajuk teks kekal KIRI - elak dua "ARClass" (teks h1 +
+   wordmark dalam logo) bertindih/bersesak sebelah-menyebelah; letak logo
+   jauh dari teks juga isi ruang kosong kanan-atas dengan kemas. */
+.top-row{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;flex-wrap:wrap;}
+.brand-logo{width:96px;height:96px;object-fit:contain;flex:0 0 auto;}
 .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--arc-ink);margin:0 0 10px;}
 h1{font-family:var(--display);font-weight:600;letter-spacing:.01em;font-size:clamp(28px,5vw,42px);margin:0;line-height:1.08;color:var(--ink);}
 h2{font-family:var(--display);font-size:15px;letter-spacing:.03em;color:var(--ink);margin:0 0 14px;}
 .subhead{color:var(--ink-dim);font-size:14px;margin:10px 0 0;max-width:58ch;line-height:1.55;}
+@media (max-width:520px){
+  .brand-logo{width:64px;height:64px;}
+}
 
 main{max-width:1080px;margin:0 auto;padding:6px 24px 60px;}
 
