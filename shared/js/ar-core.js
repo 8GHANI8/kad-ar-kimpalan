@@ -705,6 +705,23 @@ function buildLockButton(container, getLocked, setLocked){
   return btn;
 }
 
+// Reset kecemasan - kosongkan SEMUA keadaan penjejakan (pose halus, flow
+// optik, kaunter hilang) dan sorok semua model serta-merta. Disediakan
+// sebagai injap keselamatan manual: pertukaran kad yang PANTAS (kad A terus
+// ke kad B dalam bilangan bingkai kecil) kadang boleh mengelirukan penjejak
+// sehingga model LAMA (A) kekal terapung bertindih dengan model BARU (B)
+// sebelum logik automatik (lihat anySeenThisFrame di bawah) sempat bertindak
+// - butang ini bagi guru/pelajar cara pantas "mula semula bersih" bila-bila
+// masa keadaan itu berlaku.
+function buildResetButton(container, onReset){
+  const btn = document.createElement("button");
+  btn.textContent = "🔄 RESET PAPARAN";
+  btn.style.cssText = "position:absolute;top:104px;left:14px;z-index:50;font-family:monospace;font-weight:600;font-size:12px;padding:10px 14px;background:rgba(0,0,0,.6);color:#f2f1ee;border:1px solid #333;border-radius:24px;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.5);";
+  container.appendChild(btn);
+  btn.addEventListener("click", onReset);
+  return btn;
+}
+
 // ============================================================================
 // MARKER-ASSISTED OPTICAL FLOW
 // ArUco establishes the pose. While ArUco is temporarily unreadable, OpenCV.js
@@ -1040,6 +1057,27 @@ export async function startARViewer(container, topicId, items, {
     if (locked) { dragRotation.yaw = 0; dragRotation.pitch = 0; } // pulang ke kedudukan MULA bila dikunci
   });
 
+  function resetView(){
+    Object.values(groupsByMarkerId).forEach(({ group, item }) => {
+      const id = item.item_id;
+      const wasShown = wasVisible[id];
+      group.visible = false;
+      wasVisible[id] = false;
+      lostCounters[id] = 0;
+      delete smoothedQuat[id];
+      delete smoothedPos[id];
+      destroyFlowState(flowStates[id]);
+      if (group.userData.isVideoPlane && group.userData.video) {
+        group.userData.video.pause();
+        hideVideoControlsIfActive(item);
+      }
+      if (wasShown) onTargetLost && onTargetLost(item);
+    });
+    dragRotation.yaw = 0; dragRotation.pitch = 0;
+    panOffset.set(0, 0, 0);
+  }
+  const resetBtn = buildResetButton(container, resetView);
+
   // ============ isyarat sentuh: 1 jari=putar/ketik, 2 jari=cubit(zoom)+seret(pan) ============
   let pinchStartDist = null;
   let pinchStartScale = currentModelScale;
@@ -1164,6 +1202,13 @@ export async function startARViewer(container, topicId, items, {
     const imageData = dctx.getImageData(0, 0, dw, dh);
     const markers = detector.detect(imageData);
     const seenIds = new Set();
+    markers.forEach(m => seenIds.add(m.id));
+    // Sebaik SAHAJA mana-mana kad disahkan ArUco bingkai ini, item LAIN yang
+    // sedang "bertahan" semata-mata atas anggapan optical-flow/toleransi-
+    // bingkai (bukan pengesanan sebenar) dipotong SERTA-MERTA di bawah -
+    // inilah punca sebenar model LAMA bertindih dengan model kad BARU bila
+    // kad ditukar dengan pantas (lihat carian "anySeenThisFrame" di bawah).
+    const anySeenThisFrame = seenIds.size > 0;
 
     // Optical-flow uses a grayscale copy of the same camera frame. It is
     // deliberately optional: if OpenCV.js is unavailable, the old ArUco-only
@@ -1179,7 +1224,6 @@ export async function startARViewer(container, topicId, items, {
 
     // 1) ArUco is the authoritative source whenever the marker is visible.
     markers.forEach(marker => {
-      seenIds.add(marker.id);
       const entry = groupsByMarkerId[marker.id];
       if (!entry) return; // penanda dikesan tapi tiada item dikaitkan dengannya
 
@@ -1240,6 +1284,24 @@ export async function startARViewer(container, topicId, items, {
         const flow = flowStates[id];
         if (seenIds.has(Number(item.target_index)) || !flow.active || !wasVisible[id]) return;
 
+        // FIX PERTINDIHAN: kad LAIN (bukan kad item ini) baru sahaja
+        // disahkan bingkai ini - itu bermakna pengguna dah bertukar kad,
+        // BUKAN sekadar kad ini terhalang seketika. Potong terus tanpa
+        // tunggu FLOW_MAX_LOST_FRAMES (dan tanpa buang masa kira flowStep
+        // untuk item yang toh akan disorok), supaya model lama tak sempat
+        // terapung bertindih dengan model kad baru.
+        if (anySeenThisFrame) {
+          group.visible = false;
+          wasVisible[id] = false;
+          destroyFlowState(flow);
+          onTargetLost && onTargetLost(item);
+          if (group.userData.isVideoPlane && group.userData.video) {
+            group.userData.video.pause();
+            hideVideoControlsIfActive(item);
+          }
+          return;
+        }
+
         const result = flowStep(flow, grayFrame);
         if (result && result.ok) {
           flow.lostFrames = 0;
@@ -1284,11 +1346,16 @@ export async function startARViewer(container, topicId, items, {
         }
       });
     } else {
-      // No OpenCV: preserve the original ArUco-only lost-frame behavior.
+      // No OpenCV: preserve the original ArUco-only lost-frame behavior -
+      // tapi tetap potong SERTA-MERTA (bukan tunggu graceFrames) bila kad
+      // LAIN baru disahkan bingkai ini, sebab sebab yang sama macam laluan
+      // optical-flow di atas: pertukaran kad pantas, bukan sekadar halangan
+      // seketika pada kad yang sama.
       Object.values(groupsByMarkerId).forEach(({ group, item }) => {
         if (seenIds.has(Number(item.target_index))) return;
+        const effectiveGrace = anySeenThisFrame ? 0 : graceFrames;
         lostCounters[item.item_id] += 1;
-        if (lostCounters[item.item_id] > graceFrames && wasVisible[item.item_id]) {
+        if (lostCounters[item.item_id] > effectiveGrace && wasVisible[item.item_id]) {
           group.visible = false;
           wasVisible[item.item_id] = false;
           onTargetLost && onTargetLost(item);
