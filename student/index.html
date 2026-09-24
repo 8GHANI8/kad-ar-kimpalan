@@ -23,6 +23,10 @@
 </header>
 
 <main>
+  <div id="loading" class="loader-wrap loading-inline">
+    <div class="loader"></div>
+    <p>Memuatkan topik…</p>
+  </div>
   <div id="msg" class="panel" style="display:none;"></div>
   <div class="grid" id="topic-grid"></div>
 
@@ -36,8 +40,10 @@
 async function boot(){
   const grid = document.getElementById("topic-grid");
   const msg = document.getElementById("msg");
+  const loading = document.getElementById("loading");
 
   if (!apiConfigured()){
+    loading.style.display = "none";
     msg.style.display = "block";
     msg.innerHTML = `<h2>Belum disambung</h2><p style="font-size:13px;color:var(--ink-dim);">API_URL belum diisi dalam <code>shared/js/api.js</code>. Sila ikut README.md Langkah 3.</p>`;
     return;
@@ -45,6 +51,7 @@ async function boot(){
 
   try {
     const topics = await Api.getTopics();
+    loading.style.display = "none";
     if (!topics.length){
       msg.style.display = "block";
       msg.innerHTML = `<h2>Tiada topik lagi</h2><p style="font-size:13px;color:var(--ink-dim);">Tambah topik melalui halaman admin.</p>`;
@@ -69,6 +76,7 @@ async function boot(){
       grid.appendChild(a);
     });
   } catch (err) {
+    loading.style.display = "none";
     msg.style.display = "block";
     msg.innerHTML = `<h2>Ralat memuatkan data</h2><p style="font-size:13px;color:var(--ink-dim);">${err.message}</p>`;
   }

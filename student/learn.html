@@ -28,6 +28,10 @@
 <body class="viewer">
 
 <div class="viewer-wrap">
+  <div id="page-loading" class="loader-wrap loading-screen">
+    <div class="loader"></div>
+    <p>Memuatkan…</p>
+  </div>
   <div id="stage"></div>
   <div id="ar-container" style="display:none;"></div>
 
@@ -333,8 +337,10 @@ btnAr.addEventListener("click", () => switchMode("ar"));
 document.getElementById("toast-ar-close").addEventListener("click", () => { toastAr.style.display = "none"; loadAR(); });
 
 async function boot(){
+  const pageLoading = document.getElementById("page-loading");
   viewerWrap.classList.add("mode-3d"); // lalai Mod 3D - sorok pill tajuk berulang dari mula
   if (!topicId || !apiConfigured()){
+    pageLoading.style.display = "none";
     hudTitle.textContent = "Ralat konfigurasi";
     hudStatusText.textContent = !topicId ? "Topik tiada dalam URL" : "API belum disambung";
     return;
@@ -351,6 +357,7 @@ async function boot(){
   try {
     bundle = await Api.getTopicBundle(topicId);
     leafItems = flattenLeafItems(bundle.items);
+    pageLoading.style.display = "none";
     if (!leafItems.length){
       hudTitle.textContent = bundle.topic.title;
       hudStatusText.textContent = "Tiada item dalam topik ini lagi";
@@ -361,6 +368,7 @@ async function boot(){
     renderItemPicker();
     load3D();
   } catch (err) {
+    pageLoading.style.display = "none";
     hudTitle.textContent = "Ralat memuatkan";
     hudStatusText.textContent = err.message;
   }

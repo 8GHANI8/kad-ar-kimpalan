@@ -25,6 +25,10 @@
 <body class="viewer">
 
 <div class="viewer-wrap">
+  <div id="page-loading" class="loader-wrap loading-screen">
+    <div class="loader"></div>
+    <p>Memuatkan…</p>
+  </div>
 
   <!-- ===== SKRIN 1: isi nama ===== -->
   <div class="score-screen" id="screen-identify">
@@ -315,7 +319,9 @@ async function finishQuiz(){
 
 // ---------- boot ----------
 async function boot(){
+  const pageLoading = document.getElementById("page-loading");
   if (!topicId || !apiConfigured()){
+    pageLoading.style.display = "none";
     document.getElementById("identify-topic-title").textContent = "Ralat konfigurasi";
     return;
   }
@@ -334,7 +340,9 @@ async function boot(){
     document.getElementById("intro-desc").innerHTML =
       `Kamu akan diminta untuk mencari <strong style="color:var(--ink);">${leafItems.length} item</strong> tertentu menggunakan kamera. ` +
       `Bila jumpa, tekan "Ini Dia!" untuk sahkan, kemudian jawab satu soalan pendek. Setiap item bernilai 2 markah.`;
+    pageLoading.style.display = "none";
   } catch (err) {
+    pageLoading.style.display = "none";
     document.getElementById("identify-topic-title").textContent = "Ralat: " + err.message;
   }
 }

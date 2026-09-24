@@ -55,6 +55,59 @@ body{
 a{color:inherit;}
 button, input, select, textarea{font-family:var(--sans);}
 
+/* ============================================================================
+   ANIMASI LOADING - dipaparkan semasa data sedang diambil dari Google Sheet
+   (senarai topik, kad item, dsb) supaya skrin kosong sementara tak nampak
+   macam rosak/tergantung. Guna dalam DUA bentuk:
+   - .loading-inline  : blok statik dalam aliran halaman biasa (index.html,
+                         menggantikan grid topik buat sementara)
+   - .loading-screen  : lapisan PENUH menutup seluruh .viewer-wrap
+                         (learn.html/quiz.html, sebelum kamera & model sedia)
+   Kedua-dua bentuk kongsi struktur .loader-wrap > .loader + <p> label.
+   ============================================================================ */
+.loader-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;}
+.loader-wrap p{font-family:var(--mono);font-size:12px;color:var(--ink-dim);letter-spacing:.05em;margin:0;}
+.loading-inline{padding:80px 0;}
+.loading-screen{position:absolute;inset:0;z-index:60;background:var(--bg);}
+/* Mod Belajar/Kuiz guna .viewer-wrap gelap - tukar latar & warna label loader
+   supaya sepadan (kalau tidak, loader akan nampak "terbang" atas skrin gelap). */
+.viewer-wrap .loading-screen{background:#0c0d0f;}
+.viewer-wrap .loading-screen p{color:#a8a8ac;}
+
+/* HTML asal: <div class="loader"></div> */
+.loader {
+  width: 90px;
+  height: 14px;
+  box-shadow: 0 3px 0 var(--loader-track, #fff);
+  position: relative;
+  clip-path: inset(-40px 0 -5px);
+}
+.loader:before {
+  content: "";
+  position: absolute;
+  inset: auto calc(50% - 17px) 0;
+  height: 50px;
+  --g: no-repeat linear-gradient(var(--loader-bar, var(--arc)) 0 0);
+  background: var(--g), var(--g), var(--g), var(--g);
+  background-size: 16px 14px;
+  animation:
+    l7-1 2s infinite linear,
+    l7-2 2s infinite linear;
+}
+@keyframes l7-1 {
+  0%,
+  100%  {background-position: 0 -50px,100% -50px}
+  17.5% {background-position: 0 100%,100% -50px,0 -50px,100% -50px}
+  35%   {background-position: 0 100%,100% 100% ,0 -50px,100% -50px}
+  52.5% {background-position: 0 100%,100% 100% ,0 calc(100% - 16px),100% -50px}
+  70%,
+  98%  {background-position: 0 100%,100% 100% ,0 calc(100% - 16px),100% calc(100% - 16px)}
+}
+@keyframes l7-2 {
+  0%,70% {transform:translate(0)}
+  100%  {transform:translate(200%)}
+}
+
 /* A single, restrained welding motif used as a rule rather than a bar of
    hazard stripes — one hairline with a short arc-coloured tick, reused
    wherever the old dark theme used a full chevron band. */
